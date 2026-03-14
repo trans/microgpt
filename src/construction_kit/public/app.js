@@ -55,7 +55,7 @@ function createEmptyCard(name) {
       lossHistory: [],
       pollTimer: null,
       modelHash: null,
-      serverLoaded: false,  // true when this card's model is on the server
+      // serverLoaded removed — server holds N models keyed by card_id
     },
   };
 }
@@ -1965,7 +1965,6 @@ function importGraph(e) {
       state.nodes = card.rootGraph.nodes;
       state.edges = card.rootGraph.edges;
       card.engine.built = false;
-      card.engine.serverLoaded = false;
 
       buildPalette();
       renderBreadcrumbs();
@@ -2102,7 +2101,6 @@ function loadDemo() {
   card.scopeStack = [];
   card.currentScope = 'pipeline';
   card.engine.built = false;
-  card.engine.serverLoaded = false;
   card.engine.lossHistory = [];
   state.nodes = card.rootGraph.nodes;
   state.edges = card.rootGraph.edges;
@@ -2180,15 +2178,16 @@ function saveOptimizerFromDOM() {
   }
 }
 
-async function doSaveWeights(name) {
-  const eng = getEngine();
+async function doSaveWeights(name, card) {
+  card = card || getActiveCard();
+  const eng = card.engine;
   if (!eng.modelHash) return;
-  name = name || getActiveCard().name || 'default';
+  name = name || card.name || 'default';
   try {
     const resp = await fetch('/api/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hash: eng.modelHash, name }),
+      body: JSON.stringify({ hash: eng.modelHash, name, card_id: card.id }),
     });
     const data = await resp.json();
     if (data.saved) {
@@ -2209,15 +2208,16 @@ async function fetchRunMetrics(hash, name) {
   } catch { return null; }
 }
 
-async function doLoadWeights(name) {
-  const eng = getEngine();
+async function doLoadWeights(name, card) {
+  card = card || getActiveCard();
+  const eng = card.engine;
   if (!eng.modelHash) return;
   name = name || 'default';
   try {
     const resp = await fetch('/api/load', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hash: eng.modelHash, name }),
+      body: JSON.stringify({ hash: eng.modelHash, name, card_id: card.id }),
     });
     const data = await resp.json();
     if (data.loaded) {
@@ -2228,15 +2228,16 @@ async function doLoadWeights(name) {
   } catch { return false; }
 }
 
-async function autoLoadLatest() {
-  const eng = getEngine();
+async function autoLoadLatest(card) {
+  card = card || getActiveCard();
+  const eng = card.engine;
   if (!eng.modelHash) return;
   try {
     const resp = await fetch(`/api/saves/${eng.modelHash}`);
     const data = await resp.json();
     if (data.saves && data.saves.length > 0) {
       const latest = data.saves[0];
-      const loaded = await doLoadWeights(latest.name);
+      const loaded = await doLoadWeights(latest.name, card);
       if (loaded) setStatus(`Auto-loaded weights: ${latest.name}`);
     }
   } catch {}
@@ -2295,10 +2296,11 @@ async function loadRunsList() {
 }
 
 async function doResetWeights() {
-  const eng = getEngine();
+  const card = getActiveCard();
+  const eng = card.engine;
   if (!eng.built) return;
   try {
-    const payload = { version: 2, graph: serializeGraph(state.rootGraph) };
+    const payload = { version: 2, graph: serializeGraph(state.rootGraph), card_id: card.id };
     const resp = await fetch('/api/build', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2307,7 +2309,6 @@ async function doResetWeights() {
     const data = await resp.json();
     if (data.built) {
       eng.lossHistory = [];
-      eng.serverLoaded = true;
       setStatus('Weights reset — model reinitialized from scratch');
       renderCardList();
     } else {
@@ -2318,13 +2319,13 @@ async function doResetWeights() {
   }
 }
 
-async function doBuild() {
-  const eng = getEngine();
-  const card = getActiveCard();
-  saveOptimizerFromDOM();
+async function doBuild(card) {
+  card = card || getActiveCard();
+  const eng = card.engine;
+  if (card === getActiveCard()) saveOptimizerFromDOM();
 
   try {
-    const payload = { version: 2, graph: serializeGraph(state.rootGraph) };
+    const payload = { version: 2, graph: serializeGraph(card.rootGraph), card_id: card.id };
     const resp = await fetch('/api/build', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2335,12 +2336,11 @@ async function doBuild() {
     if (data.built) {
       eng.built = true;
       eng.lossHistory = [];
-      eng.modelHash = await computeModelHash(state.rootGraph);
-      eng.serverLoaded = true;
+      eng.modelHash = await computeModelHash(card.rootGraph);
       eng.summary = data.summary;
       setStatus(`Model built: ${fmtParams(data.summary.total_params)} params, ${data.summary.n_experts} experts`);
       renderCardList();
-      await autoLoadLatest();
+      await autoLoadLatest(card);
     } else {
       const errors = data.details || data.errors || [data.error || 'Unknown error'];
       alert('Build failed:\n' + errors.join('\n'));
@@ -2348,30 +2348,6 @@ async function doBuild() {
   } catch (err) {
     alert('Build error: ' + err.message);
   }
-}
-
-// Ensure active card's model is loaded on the server (rebuild if needed)
-async function ensureServerLoaded() {
-  const eng = getEngine();
-  if (!eng.built) return false;
-  if (eng.serverLoaded) return true;
-  // Silently rebuild
-  try {
-    const payload = { version: 2, graph: serializeGraph(state.rootGraph) };
-    const resp = await fetch('/api/build', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await resp.json();
-    if (data.built) {
-      eng.serverLoaded = true;
-      eng.summary = data.summary;
-      await autoLoadLatest();
-      return true;
-    }
-  } catch {}
-  return false;
 }
 
 async function doTrainAll() {
@@ -2388,11 +2364,8 @@ async function doTrainAll() {
   document.getElementById('btn-train-all').style.display = 'none';
   document.getElementById('btn-stop-all').style.display = '';
 
-  // Train each starred engine sequentially (server holds one model at a time)
-  for (const card of starred) {
-    if (card.engine.training === 'stopped') break; // user hit stop
-    await trainSingleCard(card, steps, runName);
-  }
+  // Train all starred engines in parallel (server holds N models keyed by card_id)
+  await Promise.all(starred.map(card => trainSingleCard(card, steps, runName)));
 
   document.getElementById('btn-train-all').style.display = '';
   document.getElementById('btn-stop-all').style.display = 'none';
@@ -2401,20 +2374,12 @@ async function doTrainAll() {
 
 async function trainSingleCard(card, steps, runName) {
   const eng = card.engine;
-  const prevIdx = activeCardIdx;
-
-  // Ensure this card's model is on the server
-  const cardIdx = cards.indexOf(card);
-  if (cardIdx !== activeCardIdx) switchToCard(cardIdx);
-  if (!await ensureServerLoaded()) return;
-  saveOptimizerFromDOM();
-
   const name = runName || card.name || '';
   try {
     const resp = await fetch('/api/train/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ steps, name }),
+      body: JSON.stringify({ steps, name, card_id: card.id }),
     });
     const data = await resp.json();
     if (data.started) {
@@ -2422,7 +2387,6 @@ async function trainSingleCard(card, steps, runName) {
       eng.lossHistory = [];
       renderCardList();
       setStatus(`Training ${card.name || 'untitled'}...`);
-      // Poll until complete
       await pollUntilDone(card);
     } else {
       setStatus(`${card.name || 'untitled'}: ${data.error || 'Failed to start'}`);
@@ -2437,7 +2401,7 @@ async function pollUntilDone(card) {
   return new Promise((resolve) => {
     const poll = async () => {
       try {
-        const resp = await fetch('/api/train/status');
+        const resp = await fetch(`/api/train/status?card_id=${card.id}`);
         const data = await resp.json();
 
         // Update loss history
@@ -2469,7 +2433,7 @@ async function pollUntilDone(card) {
           // Auto-save
           if (document.getElementById('btn-save-toggle')?.classList.contains('active')) {
             const rn = document.getElementById('train-run-name')?.value?.trim() || card.name || 'default';
-            await doSaveWeights(rn);
+            await doSaveWeights(rn, card);
           }
           resolve();
         } else {
@@ -2485,7 +2449,15 @@ async function pollUntilDone(card) {
 }
 
 async function doStopAll() {
-  try { await fetch('/api/train/stop', { method: 'POST' }); } catch {}
+  // Stop each training card on the server
+  const stopPromises = cards
+    .filter(c => c.engine.training)
+    .map(c => fetch('/api/train/stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ card_id: c.id }),
+    }).catch(() => {}));
+  await Promise.all(stopPromises);
   // Mark all as stopped
   cards.forEach(c => {
     if (c.engine.training) {
@@ -2555,7 +2527,6 @@ function openManualTest() {
 async function doGenerate() {
   const eng = getEngine();
   if (!eng.built) return;
-  if (!await ensureServerLoaded()) return;
 
   const seed = document.getElementById('gen-seed')?.value || 'First Citizen:\n';
   const btn = document.getElementById('btn-generate');
@@ -2566,7 +2537,7 @@ async function doGenerate() {
     const resp = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ seed, max_tokens: 200, temperature: 0.8 }),
+      body: JSON.stringify({ seed, max_tokens: 200, temperature: 0.8, card_id: getActiveCard().id }),
     });
     const data = await resp.json();
     document.getElementById('gen-overlay-text').textContent = data.text || data.error || 'No output';
@@ -2650,6 +2621,12 @@ function deleteCard(idx) {
     clearInterval(card.engine.pollTimer);
     card.engine.pollTimer = null;
   }
+  // Free server slot
+  fetch('/api/slot', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ card_id: card.id }),
+  }).catch(() => {});
   cards.splice(idx, 1);
   if (activeCardIdx >= cards.length) activeCardIdx = cards.length - 1;
   if (idx === activeCardIdx || activeCardIdx >= cards.length) {
@@ -2667,9 +2644,6 @@ function switchToCard(newIdx) {
   saveOptimizerFromDOM();
   const nameInput = document.querySelector('.project-card.expanded .card-name-input');
   if (nameInput) getActiveCard().name = nameInput.value.trim();
-
-  // Mark old card's model as not on the server anymore (server holds one model)
-  cards.forEach(c => c.engine.serverLoaded = false);
 
   activeCardIdx = newIdx;
   loadCardIntoCanvas(newIdx);
