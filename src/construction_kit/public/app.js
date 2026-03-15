@@ -13,22 +13,22 @@ const starSvg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentCo
 const SCOPE_LEVELS = {
   pipeline: {
     label: "Pipeline",
-    components: ["source", "char_tokenizer", "bpe_tokenizer", "sequential_window", "sliding_window", "random_window", "random_init", "zero_init", "learned_init", "cooperative", "loss"],
+    components: ["source", "char_tokenizer", "bpe_tokenizer", "sequential_window", "sliding_window", "random_window", "random_init", "zero_init", "learned_init", "cooperative", "loss", "optimizer"],
     containers: { cooperative: "ensemble" },  // double-click cooperative → enter ensemble scope
   },
   ensemble: {
     label: "Ensemble",
-    components: ["transformer", "counter", "bigram", "global_router", "context_router", "gated_router", "stream_projector"],
+    components: ["transformer", "counter", "bigram", "global_router", "context_router", "gated_router", "stream_projector", "optimizer"],
     containers: { transformer: "transformer_internal", counter: "expert_internal" },
   },
   transformer_internal: {
     label: "Transformer",
-    components: ["embedding", "attention_layer", "ffn_layer", "layer_norm", "output_head", "stream_proj_internal"],
+    components: ["embedding", "attention_layer", "ffn_layer", "layer_norm", "output_head", "stream_proj_internal", "optimizer"],
     containers: {},
   },
   expert_internal: {
     label: "Expert",
-    components: ["embedding", "ffn_layer", "layer_norm", "output_head", "stream_proj_internal"],
+    components: ["embedding", "ffn_layer", "layer_norm", "output_head", "stream_proj_internal", "optimizer"],
     containers: {},
   },
 };
@@ -48,14 +48,11 @@ function createEmptyCard(name) {
     nextId: 1,
     scopeStack: [],
     currentScope: 'pipeline',
-    optimizer: { type: 'adam', learning_rate: 0.0003, beta1: 0.9, beta2: 0.999 },
     engine: {
       built: false,
       training: false,
       lossHistory: [],
-      pollTimer: null,
       modelHash: null,
-      // serverLoaded removed — server holds N models keyed by card_id
     },
   };
 }
@@ -1906,12 +1903,10 @@ function doDemo() {
 
 function exportGraph() {
   const card = getActiveCard();
-  saveOptimizerFromDOM();
   const name = card.name || 'untitled';
   const data = {
     version: 3,
     name: name,
-    optimizer: card.optimizer,
     graph: serializeGraph(state.rootGraph),
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1940,15 +1935,15 @@ function serializeGraph(graph) {
 function importGraph(e) {
   const file = e.target.files[0];
   if (!file) return;
+  if (cards.length >= MAX_CARDS) { setStatus('Max engines reached'); return; }
   const reader = new FileReader();
   reader.onload = () => {
     try {
       const data = JSON.parse(reader.result);
-      const card = getActiveCard();
+      const card = createEmptyCard(data.name || file.name.replace(/\.json$/, ''));
       if ((data.version === 2 || data.version === 3) && data.graph) {
         card.rootGraph = deserializeGraph(data.graph);
       } else {
-        card.rootGraph = { nodes: [], edges: [] };
         for (const n of data.nodes || []) {
           card.rootGraph.nodes.push({ ...n, label: getCompDef(n.type)?.label || n.type, children: null });
           if (n.id >= card.nextId) card.nextId = n.id + 1;
@@ -1957,21 +1952,10 @@ function importGraph(e) {
           card.rootGraph.edges.push({ id: card.nextId++, from: ed.from, to: ed.to });
         }
       }
-      if (data.name) card.name = data.name;
-      if (data.optimizer) Object.assign(card.optimizer, data.optimizer);
-
-      card.scopeStack = [];
-      card.currentScope = 'pipeline';
-      state.nodes = card.rootGraph.nodes;
-      state.edges = card.rootGraph.edges;
-      card.engine.built = false;
-
-      buildPalette();
-      renderBreadcrumbs();
-      renderAll();
+      cards.push(card);
+      switchToCard(cards.length - 1);
       fitToView();
-      renderCardList();
-      setStatus('Design imported.');
+      setStatus('Design imported as new engine.');
     } catch (err) {
       setStatus('Import failed: ' + err.message);
     }
@@ -2069,7 +2053,7 @@ function loadDemo() {
   const card = getActiveCard();
   const id = () => card.nextId++;
 
-  const srcId = id(), tokId = id(), winId = id(), initId = id(), coopId = id(), lossId = id();
+  const srcId = id(), tokId = id(), winId = id(), initId = id(), coopId = id(), lossId = id(), optId = id();
 
   card.rootGraph = {
     nodes: [
@@ -2079,6 +2063,7 @@ function loadDemo() {
       { id: initId, type: "zero_init", x: 0, y: -60, params: {}, children: null },
       { id: coopId, type: "cooperative", x: 280, y: 60, params: { stream_dim: 64 }, children: null },
       { id: lossId, type: "loss", x: 560, y: 100, params: {}, children: null },
+      { id: optId, type: "optimizer", x: 560, y: -60, params: { algorithm: "adam", learning_rate: 0.0003, beta1: 0.9, beta2: 0.999 }, children: null },
     ],
     edges: [
       // Source → Tokenizer → Windower
@@ -2154,28 +2139,21 @@ async function computeModelHash(graph) {
 // Convenience accessor for active card's engine
 function getEngine() { return getActiveCard().engine; }
 
-function getOptimizerConfig() {
-  const card = getActiveCard();
-  return { ...card.optimizer };
+// Find the effective optimizer config by walking the graph hierarchy
+// (nearest optimizer node wins — deeper scopes override)
+function resolveOptimizer(graph) {
+  // Check this scope for an optimizer node
+  const optNode = graph.nodes.find(n => n.type === 'optimizer');
+  if (optNode) return optNode.params;
+  return null;
 }
 
-function saveOptimizerFromDOM() {
-  const card = getActiveCard();
-  const el = document.querySelector('.project-card.expanded');
-  if (!el) return;
-  const type = el.querySelector('.opt-type')?.value || 'adam';
-  card.optimizer.type = type;
-  card.optimizer.learning_rate = parseFloat(el.querySelector('.opt-lr')?.value || 0.0003);
-  if (type === 'adam' || type === 'adamw') {
-    card.optimizer.beta1 = parseFloat(el.querySelector('.opt-beta1')?.value || 0.9);
-    card.optimizer.beta2 = parseFloat(el.querySelector('.opt-beta2')?.value || 0.999);
-  }
-  if (type === 'sgd') {
-    card.optimizer.momentum = parseFloat(el.querySelector('.opt-momentum')?.value || 0);
-  }
-  if (type === 'adamw') {
-    card.optimizer.weight_decay = parseFloat(el.querySelector('.opt-wd')?.value || 0.01);
-  }
+function resolveOptimizerForGraph(rootGraph) {
+  // Walk top-down: pipeline → ensemble → expert internals
+  // For now just find the first optimizer in the pipeline (top scope)
+  // Full inheritance resolution happens on the server
+  const opt = resolveOptimizer(rootGraph);
+  return opt || { algorithm: 'adam', learning_rate: 0.0003, beta1: 0.9, beta2: 0.999 };
 }
 
 async function doSaveWeights(name, card) {
@@ -2320,9 +2298,8 @@ async function doResetWeights() {
 }
 
 async function doBuild(card) {
-  card = card || getActiveCard();
+  if (!card || card instanceof Event) card = getActiveCard();
   const eng = card.engine;
-  if (card === getActiveCard()) saveOptimizerFromDOM();
 
   try {
     const payload = { version: 2, graph: serializeGraph(card.rootGraph), card_id: card.id };
@@ -2387,7 +2364,7 @@ async function trainSingleCard(card, steps, runName) {
       eng.lossHistory = [];
       renderCardList();
       setStatus(`Training ${card.name || 'untitled'}...`);
-      await pollUntilDone(card);
+      await watchTraining(card);
     } else {
       setStatus(`${card.name || 'untitled'}: ${data.error || 'Failed to start'}`);
     }
@@ -2396,55 +2373,97 @@ async function trainSingleCard(card, steps, runName) {
   }
 }
 
-async function pollUntilDone(card) {
+function watchTraining(card) {
   const eng = card.engine;
+  let resolved = false;
+
+  function finish(avgLoss) {
+    if (resolved) return;
+    resolved = true;
+    eng.training = false;
+    if (avgLoss != null) {
+      setStatus(`${card.name || 'untitled'}: done. Loss: ${avgLoss.toFixed(4)}`);
+    }
+    renderCardList();
+    // Auto-save
+    if (document.getElementById('btn-save-toggle')?.classList.contains('active')) {
+      const rn = document.getElementById('train-run-name')?.value?.trim() || card.name || 'default';
+      doSaveWeights(rn, card);
+    }
+  }
+
+  function handleStepData(data) {
+    // Update loss history
+    if (eng.lossHistory.length === 0 || eng.lossHistory[eng.lossHistory.length - 1].step !== data.step) {
+      eng.lossHistory.push({ step: data.step, loss: data.avg_loss });
+      // Unhide loss chart if hidden
+      const wrap = document.querySelector('.project-card.expanded .loss-chart-wrap');
+      if (wrap) wrap.style.display = '';
+      drawLossChart();
+      drawAllSparklines();
+    }
+
+    // Update train status in expanded card if visible
+    const tsEl = document.querySelector('.project-card.expanded .train-status');
+    if (tsEl && cards[activeCardIdx] === card) {
+      const elapsed = data.elapsed_sec || 0;
+      const stepsPerSec = elapsed > 0 ? (data.step / elapsed).toFixed(1) : '\u2014';
+      const timeStr = elapsed >= 60
+        ? `${Math.floor(elapsed / 60)}m ${Math.round(elapsed % 60)}s`
+        : `${elapsed.toFixed(1)}s`;
+      tsEl.innerHTML = `
+        <div class="ts-loss">${data.avg_loss.toFixed(4)}</div>
+        <div class="ts-step">Step ${data.step} / ${data.steps} \u00b7 ${timeStr} \u00b7 ${stepsPerSec} steps/s</div>
+      `;
+      tsEl.style.display = '';
+    }
+  }
+
   return new Promise((resolve) => {
-    const poll = async () => {
+    // WebSocket for real-time step updates
+    const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${wsProto}//${location.host}/ws/train?card_id=${card.id}`);
+    eng._trainWs = ws;
+
+    ws.onmessage = (evt) => {
+      try {
+        const data = JSON.parse(evt.data);
+        if (data.type === 'done') {
+          ws.close();
+          eng._trainWs = null;
+          finish(data.avg_loss);
+          resolve();
+          return;
+        }
+        handleStepData(data);
+      } catch (e) {
+        console.error('WS message error:', e);
+      }
+    };
+
+    ws.onerror = () => {};
+
+    ws.onclose = () => {
+      eng._trainWs = null;
+    };
+
+    // Fallback: poll for completion every 3s in case WS misses events
+    const fallback = setInterval(async () => {
+      if (resolved) { clearInterval(fallback); return; }
       try {
         const resp = await fetch(`/api/train/status?card_id=${card.id}`);
         const data = await resp.json();
-
-        // Update loss history
-        if (eng.lossHistory.length === 0 || eng.lossHistory[eng.lossHistory.length - 1].step !== data.step) {
-          eng.lossHistory.push({ step: data.step, loss: data.avg_loss });
-          drawLossChart();
-          drawAllSparklines();
-        }
-
-        // Update train status in expanded card if visible
-        const tsEl = document.querySelector('.project-card.expanded .train-status');
-        if (tsEl && cards[activeCardIdx] === card) {
-          const elapsed = data.elapsed_sec || 0;
-          const stepsPerSec = elapsed > 0 ? (data.step / elapsed).toFixed(1) : '\u2014';
-          const timeStr = elapsed >= 60
-            ? `${Math.floor(elapsed / 60)}m ${Math.round(elapsed % 60)}s`
-            : `${elapsed.toFixed(1)}s`;
-          tsEl.innerHTML = `
-            <div class="ts-loss">${data.avg_loss.toFixed(4)}</div>
-            <div class="ts-step">Step ${data.step} / ${data.steps} \u00b7 ${timeStr} \u00b7 ${stepsPerSec} steps/s</div>
-          `;
-          tsEl.style.display = '';
-        }
-
+        // Update UI from poll too
+        if (data.step > 0) handleStepData(data);
         if (!data.training) {
-          eng.training = false;
-          setStatus(`${card.name || 'untitled'}: done. Loss: ${data.avg_loss.toFixed(4)}`);
-          renderCardList();
-          // Auto-save
-          if (document.getElementById('btn-save-toggle')?.classList.contains('active')) {
-            const rn = document.getElementById('train-run-name')?.value?.trim() || card.name || 'default';
-            await doSaveWeights(rn, card);
-          }
+          clearInterval(fallback);
+          if (ws.readyState === WebSocket.OPEN) ws.close();
+          eng._trainWs = null;
+          finish(data.avg_loss);
           resolve();
-        } else {
-          setTimeout(poll, 4000);
         }
-      } catch (e) {
-        console.error('Poll error:', e);
-        setTimeout(poll, 4000);
-      }
-    };
-    poll();
+      } catch {}
+    }, 3000);
   });
 }
 
@@ -2458,14 +2477,14 @@ async function doStopAll() {
       body: JSON.stringify({ card_id: c.id }),
     }).catch(() => {}));
   await Promise.all(stopPromises);
-  // Mark all as stopped
+  // Mark all as stopped — the server will send "done" events via WebSocket
+  // which will close the connections and resolve the watchTraining promises
   cards.forEach(c => {
     if (c.engine.training) {
       c.engine.training = 'stopped';
     }
   });
   setStatus('Training stopped.');
-  // The pollUntilDone will see training=false from server and resolve
 }
 
 function drawLossChart() {
@@ -2561,6 +2580,7 @@ function fmtParams(n) {
 
 function setupCards() {
   document.getElementById('btn-add-card').addEventListener('click', addCard);
+  document.getElementById('btn-import-card').addEventListener('click', () => document.getElementById('import-file').click());
   document.getElementById('btn-fit').addEventListener('click', fitToView);
   document.getElementById('btn-clear').addEventListener('click', () => clearCanvas());
   document.getElementById('btn-train-all').addEventListener('click', doTrainAll);
@@ -2616,10 +2636,10 @@ async function destroySavedWeights(card) {
 function deleteCard(idx) {
   if (cards.length <= 1) return;
   const card = cards[idx];
-  // Stop polling if training
-  if (card.engine.pollTimer) {
-    clearInterval(card.engine.pollTimer);
-    card.engine.pollTimer = null;
+  // Close WebSocket if training
+  if (card.engine._trainWs) {
+    card.engine._trainWs.close();
+    card.engine._trainWs = null;
   }
   // Free server slot
   fetch('/api/slot', {
@@ -2641,7 +2661,6 @@ function deleteCard(idx) {
 function switchToCard(newIdx) {
   if (newIdx === activeCardIdx) return;
   // Save current DOM state to old card
-  saveOptimizerFromDOM();
   const nameInput = document.querySelector('.project-card.expanded .card-name-input');
   if (nameInput) getActiveCard().name = nameInput.value.trim();
 
@@ -2669,8 +2688,9 @@ function loadCardIntoCanvas(idx) {
 function renderCardList() {
   const list = document.getElementById('cards-list');
   list.innerHTML = '';
-  const addBtn = document.getElementById('btn-add-card');
-  addBtn.disabled = cards.length >= MAX_CARDS;
+  const atMax = cards.length >= MAX_CARDS;
+  document.getElementById('btn-add-card').disabled = atMax;
+  document.getElementById('btn-import-card').disabled = atMax;
 
   cards.forEach((card, idx) => {
     const isActive = idx === activeCardIdx;
@@ -2706,7 +2726,12 @@ function renderCollapsedCard(card) {
   const name = card.name || 'untitled';
   const lossStr = eng.lossHistory.length > 0
     ? eng.lossHistory[eng.lossHistory.length - 1].loss.toFixed(4) : '';
-  const trainBadge = eng.training ? '<span class="card-training">TRAINING</span>' : '';
+  let trainBadge = '';
+  if (eng.training) {
+    const last = eng.lossHistory.length > 0 ? eng.lossHistory[eng.lossHistory.length - 1] : null;
+    const stepInfo = last ? ` ${last.step}` : '';
+    trainBadge = `<span class="card-training">TRAINING${stepInfo}</span>`;
+  }
   const starCls = card.starred ? 'starred' : '';
   return `
     <div class="card-header">
@@ -2721,7 +2746,6 @@ function renderCollapsedCard(card) {
 
 function renderExpandedCard(card) {
   const eng = card.engine;
-  const opt = card.optimizer;
   const isTraining = eng.training;
 
   let modelInfoHtml = '';
@@ -2749,35 +2773,7 @@ function renderExpandedCard(card) {
     <div class="card-engine">
       <div class="prop-group" style="display:flex;gap:4px;flex-wrap:wrap">
         <button class="toolbar-btn btn-demo" style="flex:1;font-size:12px;padding:4px 8px">Demo</button>
-        <button class="toolbar-btn btn-import" style="flex:1;font-size:12px;padding:4px 8px">Import</button>
         <button class="toolbar-btn btn-export" style="flex:1;font-size:12px;padding:4px 8px">Export</button>
-
-      </div>
-      <div class="prop-group">
-        <label>optimizer</label>
-        <select class="opt-type">
-          <option value="adam" ${opt.type === 'adam' ? 'selected' : ''}>Adam</option>
-          <option value="sgd" ${opt.type === 'sgd' ? 'selected' : ''}>SGD</option>
-          <option value="adamw" ${opt.type === 'adamw' ? 'selected' : ''}>AdamW</option>
-        </select>
-      </div>
-      <div class="prop-group">
-        <label>learning rate</label>
-        <input type="number" class="opt-lr" value="${opt.learning_rate}" min="0.000001" max="0.1" step="0.0001">
-        <div class="opt-adam-params" style="${opt.type === 'adam' ? '' : 'display:none'}">
-          <label>beta1</label>
-          <input type="number" class="opt-beta1" value="${opt.beta1 || 0.9}" min="0" max="0.999" step="0.01">
-          <label>beta2</label>
-          <input type="number" class="opt-beta2" value="${opt.beta2 || 0.999}" min="0" max="0.9999" step="0.001">
-        </div>
-        <div class="opt-sgd-params" style="${opt.type === 'sgd' ? '' : 'display:none'}">
-          <label>momentum</label>
-          <input type="number" class="opt-momentum" value="${opt.momentum || 0}" min="0" max="0.99" step="0.01">
-        </div>
-        <div class="opt-adamw-params" style="${opt.type === 'adamw' ? '' : 'display:none'}">
-          <label>weight decay</label>
-          <input type="number" class="opt-wd" value="${opt.weight_decay || 0.01}" min="0" max="1.0" step="0.001">
-        </div>
       </div>
       <div class="prop-group">
         <button class="toolbar-btn engine-btn btn-build">${eng.built ? 'Rebuild Model' : 'Build Model'}</button>
@@ -2819,21 +2815,8 @@ function bindExpandedCardEvents(div, card, idx) {
 
   // Design buttons
   div.querySelector('.btn-demo')?.addEventListener('click', doDemo);
-  div.querySelector('.btn-import')?.addEventListener('click', () => document.getElementById('import-file').click());
   div.querySelector('.btn-export')?.addEventListener('click', exportGraph);
 
-
-  // Optimizer type switcher
-  const optType = div.querySelector('.opt-type');
-  optType?.addEventListener('change', () => {
-    const v = optType.value;
-    const adam = div.querySelector('.opt-adam-params');
-    const sgd = div.querySelector('.opt-sgd-params');
-    const adamw = div.querySelector('.opt-adamw-params');
-    if (adam) adam.style.display = v === 'adam' ? '' : 'none';
-    if (sgd) sgd.style.display = v === 'sgd' ? '' : 'none';
-    if (adamw) adamw.style.display = v === 'adamw' ? '' : 'none';
-  });
 
   // Star toggle
   div.querySelector('.card-star')?.addEventListener('click', (e) => {

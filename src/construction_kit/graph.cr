@@ -271,6 +271,16 @@ module ConstructionKit
     # Determine if there's a counter expert
     has_counter = expert_nodes.any? { |n| n.type == "counter" }
 
+    # Find optimizer node (pipeline level only for now)
+    # TODO: Optimizer inheritance — optimizer nodes can appear at any scope level
+    # (pipeline, ensemble, transformer_internal, expert_internal). Deeper scopes
+    # override shallower ones. Walk the graph tree top-down, resolve the effective
+    # optimizer per expert/layer, and pass per-expert optimizer configs to the
+    # builder so different experts can train with different learning rates, betas,
+    # or even different algorithms (e.g. SGD for the counter, Adam for transformers).
+    opt_node = graph.nodes.find { |n| n.type == "optimizer" }
+    learning_rate = opt_node.try(&.param_f("learning_rate", 3e-4)) || 3e-4
+
     ModelConfig.new(
       data_file: data_file,
       seq_len: seq_len,
@@ -279,7 +289,7 @@ module ConstructionKit
       router_type: router_type,
       router_epsilon: router_epsilon,
       has_counter: has_counter,
-      learning_rate: 3e-4,
+      learning_rate: learning_rate,
     )
   end
 end

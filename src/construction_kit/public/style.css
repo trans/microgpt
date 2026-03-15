@@ -191,14 +191,14 @@ html, body { height: 100%; overflow: hidden; font-family: 'JetBrains Mono', 'Fir
   padding: 14px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
 #cards-header h2 { font-size: 14px; color: var(--accent); letter-spacing: 1px; }
-#btn-add-card {
+#btn-add-card, #btn-import-card {
   background: var(--bg-card); border: 1px solid var(--border); color: var(--accent);
   width: 28px; height: 28px; border-radius: 6px; font-size: 18px;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
   font-family: inherit;
 }
-#btn-add-card:hover { border-color: var(--accent); }
-#btn-add-card:disabled { opacity: 0.3; cursor: default; }
+#btn-add-card:hover, #btn-import-card:hover { border-color: var(--accent); }
+#btn-add-card:disabled, #btn-import-card:disabled { opacity: 0.3; cursor: default; }
 
 /* Global training controls */
 #train-controls {

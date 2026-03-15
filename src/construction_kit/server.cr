@@ -439,9 +439,11 @@ module ConstructionKit
           # Emit event for WebSocket clients
           event = TrainEvent.new(
             step: step + 1,
+            steps: steps,
             loss: loss,
             avg_loss: slot.avg_loss,
             grad_norm: result.grad_norm,
+            elapsed_sec: elapsed.round(2),
             router_weights: result.router_weights,
           )
 
@@ -489,6 +491,22 @@ module ConstructionKit
         slot.train_log = nil
 
         slot.training = false
+
+        # Send done event to WebSocket clients
+        done_event = TrainEvent.new(
+          step: slot.train_step,
+          steps: steps,
+          loss: slot.avg_loss,
+          avg_loss: slot.avg_loss,
+          grad_norm: 0.0,
+          elapsed_sec: elapsed.round(2),
+          router_weights: "",
+        )
+        done_event.type = "done"
+        begin
+          slot.train_channel.send(done_event)
+        rescue Channel::ClosedError
+        end
       end
     end
 
@@ -580,14 +598,17 @@ module ConstructionKit
 
   struct TrainEvent
     include JSON::Serializable
+    property type : String = "step"
     property step : Int32
+    property steps : Int32 = 0
     property loss : Float64
     property avg_loss : Float64
     property grad_norm : Float64
+    property elapsed_sec : Float64 = 0.0
     property router_weights : String
     property sample : String? = nil
 
-    def initialize(@step, @loss, @avg_loss, @grad_norm, @router_weights)
+    def initialize(@step, @steps, @loss, @avg_loss, @grad_norm, @elapsed_sec, @router_weights)
     end
   end
 
