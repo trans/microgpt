@@ -11,6 +11,8 @@ targets:
 dependencies:
   jargon:
     github: trans/jargon
+  arcana:
+    github: trans/arcana
 
 crystal: '>= 1.19.1'
 

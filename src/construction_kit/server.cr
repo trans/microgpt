@@ -1,6 +1,7 @@
 require "http/server"
 require "json"
 require "file_utils"
+require "arcana"
 require "./graph"
 require "./builder"
 
@@ -31,10 +32,69 @@ module ConstructionKit
       "microgpt"
     )
 
+    @chat_provider : Arcana::Chat::Anthropic? = nil
+    @chat_tools : Array(Arcana::Chat::Tool) = [] of Arcana::Chat::Tool
+    @chat_sessions : Hash(String, Arcana::Chat::History) = {} of String => Arcana::Chat::History
+
     def initialize(@host : String = "127.0.0.1", @port : Int32 = 8080, @data_dir : String = DEFAULT_DATA_DIR)
       @saves_dir = File.join(@data_dir, "saves")
       @logs_dir = File.join(@data_dir, "logs")
+      @projects_dir = File.join(@data_dir, "projects")
       @slots = {} of String => ModelSlot
+      @chat_sessions = {} of String => Arcana::Chat::History
+      @chat_provider = init_chat_provider
+      @chat_tools = init_chat_tools
+    end
+
+    private def init_chat_provider : Arcana::Chat::Anthropic?
+      api_key = ENV["ANTHROPIC_API_KEY"]?
+      return nil unless api_key && !api_key.empty?
+      Arcana::Chat::Anthropic.new(api_key: api_key, model: "claude-sonnet-4-20250514", max_tokens: 4096)
+    end
+
+    private def init_chat_tools : Array(Arcana::Chat::Tool)
+      [
+        Arcana::Chat::Tool.new(
+          name: "get_graph",
+          description: "Get the current graph state for a card. Returns the full node/edge structure.",
+          parameters_json: %({"type":"object","properties":{"card_id":{"type":"string","description":"Card ID to inspect"}},"required":["card_id"]})
+        ),
+        Arcana::Chat::Tool.new(
+          name: "get_model_summary",
+          description: "Get the built model summary for a card (params, experts, router, etc).",
+          parameters_json: %({"type":"object","properties":{"card_id":{"type":"string","description":"Card ID"}},"required":["card_id"]})
+        ),
+        Arcana::Chat::Tool.new(
+          name: "list_components",
+          description: "List all available component types that can be used in graphs, with their ports and parameters.",
+          parameters_json: %({"type":"object","properties":{}})
+        ),
+        Arcana::Chat::Tool.new(
+          name: "update_graph",
+          description: "Replace the graph for a card with a new one. The graph should be a complete valid graph with nodes and edges.",
+          parameters_json: %({"type":"object","properties":{"card_id":{"type":"string","description":"Card ID"},"graph":{"type":"object","description":"New graph with nodes and edges arrays"}},"required":["card_id","graph"]})
+        ),
+        Arcana::Chat::Tool.new(
+          name: "build_model",
+          description: "Build/compile the model for a card so it can be trained.",
+          parameters_json: %({"type":"object","properties":{"card_id":{"type":"string","description":"Card ID"}},"required":["card_id"]})
+        ),
+        Arcana::Chat::Tool.new(
+          name: "train_model",
+          description: "Start training a built model.",
+          parameters_json: %({"type":"object","properties":{"card_id":{"type":"string","description":"Card ID"},"steps":{"type":"integer","description":"Number of training steps","default":1000}},"required":["card_id"]})
+        ),
+        Arcana::Chat::Tool.new(
+          name: "generate_text",
+          description: "Generate text from a trained model.",
+          parameters_json: %({"type":"object","properties":{"card_id":{"type":"string","description":"Card ID"},"seed":{"type":"string","description":"Seed text to continue from","default":"First Citizen:"},"max_tokens":{"type":"integer","description":"Max tokens to generate","default":200},"temperature":{"type":"number","description":"Sampling temperature","default":0.8}},"required":["card_id"]})
+        ),
+        Arcana::Chat::Tool.new(
+          name: "get_training_status",
+          description: "Check training status for a card.",
+          parameters_json: %({"type":"object","properties":{"card_id":{"type":"string","description":"Card ID"}},"required":["card_id"]})
+        ),
+      ]
     end
 
     private def slot_for(card_id : String) : ModelSlot
@@ -216,6 +276,141 @@ module ConstructionKit
           avg_loss:    slot.avg_loss,
           elapsed_sec: elapsed.round(1),
         }.to_json)
+
+      when {"GET", "/api/projects"}
+        Dir.mkdir_p(@projects_dir)
+        projects = [] of NamedTuple(name: String, saved_at: String, engine_count: Int32)
+        Dir.glob(File.join(@projects_dir, "*.json")).each do |path|
+          begin
+            data = JSON.parse(File.read(path))
+            projects << {
+              name:         data["name"].as_s,
+              saved_at:     data["saved_at"]?.try(&.as_s?) || "",
+              engine_count: data["engines"].as_a.size,
+            }
+          rescue
+            next
+          end
+        end
+        projects.sort_by! { |p| p[:saved_at] }.reverse!
+        ctx.response.print({projects: projects}.to_json)
+
+      when {"POST", "/api/project/save"}
+        body = ctx.request.body.try(&.gets_to_end) || "{}"
+        params = JSON.parse(body)
+        name = params["name"]?.try(&.as_s?) || ""
+        safe_name = name.gsub(/[^a-zA-Z0-9_-]/, "_")
+        if safe_name.empty?
+          ctx.response.status = HTTP::Status.new(400)
+          ctx.response.print({error: "Project name required"}.to_json)
+          return
+        end
+        engines = params["engines"]?.try(&.as_a?) || [] of JSON::Any
+        project = {
+          name:     name,
+          saved_at: Time.utc.to_rfc3339,
+          engines:  engines,
+        }
+        Dir.mkdir_p(@projects_dir)
+        File.write(File.join(@projects_dir, "#{safe_name}.json"), project.to_json)
+        ctx.response.print({saved: true, name: name}.to_json)
+
+      when {"POST", "/api/project/load"}
+        body = ctx.request.body.try(&.gets_to_end) || "{}"
+        params = JSON.parse(body)
+        name = params["name"]?.try(&.as_s?) || ""
+        safe_name = name.gsub(/[^a-zA-Z0-9_-]/, "_")
+        path = File.join(@projects_dir, "#{safe_name}.json")
+        unless File.exists?(path)
+          ctx.response.status = HTTP::Status.new(404)
+          ctx.response.print({error: "Project not found"}.to_json)
+          return
+        end
+        data = JSON.parse(File.read(path))
+        engines = data["engines"].as_a.map do |eng|
+          hash = eng["hash"]?.try(&.as_s?) || ""
+          graph_path = File.join(@saves_dir, hash, "graph.json")
+          graph = File.exists?(graph_path) ? JSON.parse(File.read(graph_path)) : nil
+          {
+            hash:      hash,
+            card_name: eng["card_name"]?.try(&.as_s?) || "untitled",
+            starred:   eng["starred"]?.try(&.as_bool?) || false,
+            graph:     graph,
+          }
+        end
+        ctx.response.print({name: data["name"].as_s, engines: engines}.to_json)
+
+      when {"DELETE", "/api/project"}
+        body = ctx.request.body.try(&.gets_to_end) || "{}"
+        params = JSON.parse(body)
+        name = params["name"]?.try(&.as_s?) || ""
+        safe_name = name.gsub(/[^a-zA-Z0-9_-]/, "_")
+        path = File.join(@projects_dir, "#{safe_name}.json")
+        if File.exists?(path)
+          File.delete(path)
+          ctx.response.print({deleted: true}.to_json)
+        else
+          ctx.response.status = HTTP::Status.new(404)
+          ctx.response.print({error: "Project not found"}.to_json)
+        end
+
+      when {"POST", "/api/chat"}
+        unless @chat_provider
+          ctx.response.status = HTTP::Status.new(503)
+          ctx.response.print({error: "ANTHROPIC_API_KEY not set"}.to_json)
+          return
+        end
+
+        body = ctx.request.body.try(&.gets_to_end) || "{}"
+        params = JSON.parse(body)
+        session_id = params["session_id"]?.try(&.as_s?) || "default"
+        message = params["message"]?.try(&.as_s?) || ""
+        card_id = params["card_id"]?.try(&.as_s?)
+
+        if message.empty?
+          ctx.response.status = HTTP::Status.new(400)
+          ctx.response.print({error: "Message required"}.to_json)
+          return
+        end
+
+        history = @chat_sessions[session_id] ||= begin
+          h = Arcana::Chat::History.new
+          h.add_system(chat_system_prompt)
+          h
+        end
+
+        history.add_user(message)
+
+        # Build viewscreen content (ephemeral — injected before the call, not stored)
+        viewscreen = params["viewscreen"]?
+        viewscreen_text = if viewscreen && !viewscreen.as_h?.try(&.empty?)
+          "<VIEWSCREEN:MicroGPT>\n#{viewscreen.to_json}\n</VIEWSCREEN:MicroGPT>"
+        else
+          nil
+        end
+
+        reply = chat_tool_loop(history, card_id, viewscreen_text)
+        reply_html = Arcana::Markdown.to_html(reply)
+        ctx.response.print({reply: reply_html, session_id: session_id}.to_json)
+
+      when {"DELETE", "/api/chat"}
+        body = ctx.request.body.try(&.gets_to_end) || "{}"
+        params = JSON.parse(body)
+        session_id = params["session_id"]?.try(&.as_s?) || "default"
+        @chat_sessions.delete(session_id)
+        ctx.response.print({cleared: true}.to_json)
+
+      when {"GET", "/api/data-files"}
+        # List .txt files in data/ directory for the file picker
+        files = [] of String
+        data_dir = "data"
+        if Dir.exists?(data_dir)
+          Dir.glob(File.join(data_dir, "**", "*.txt")).each do |path|
+            files << path
+          end
+        end
+        files.sort!
+        ctx.response.print({files: files}.to_json)
 
       when {"POST", "/api/generate"}
         body = ctx.request.body.try(&.gets_to_end) || "{}"
@@ -599,6 +794,200 @@ module ConstructionKit
     private def compute_graph_hash(graph : GraphData) : String?
       # Stub: return nil until proper canonicalization is implemented
       nil
+    end
+
+    # Inject viewscreen as a user message just before the last user message.
+    # The viewscreen is ephemeral — it's never stored in history.
+    private def inject_viewscreen(messages : Array(Arcana::Chat::Message), viewscreen : String?) : Array(Arcana::Chat::Message)
+      return messages unless viewscreen
+
+      result = messages.dup
+
+      # Find the last user message index
+      last_user_idx = nil
+      result.each_with_index do |msg, i|
+        last_user_idx = i if msg.role == "user"
+      end
+
+      if last_user_idx
+        vs_msg = Arcana::Chat::Message.user(viewscreen)
+        result.insert(last_user_idx, vs_msg)
+      end
+
+      result
+    end
+
+    private def chat_system_prompt : String
+      <<-PROMPT
+      You are an AI assistant embedded in the microGPT Construction Kit — a visual tool for building and training small GPT-style language models.
+
+      The user builds models by arranging components in a graph: tokenizers, windowers, transformer experts, routers, and other blocks. Components connect via typed ports. The system uses a cooperative ensemble architecture where multiple experts produce logits that are blended by a router.
+
+      You can help users by:
+      - Explaining how components work and how to connect them
+      - Inspecting their current graph and suggesting improvements
+      - Modifying their graph to add/remove/reconfigure components
+      - Building, training, and testing models
+      - Interpreting training results and loss curves
+
+      When modifying graphs, use the update_graph tool with a complete graph structure. Always inspect the current graph first with get_graph before making changes.
+
+      Keep responses concise and practical. The user can see the visual graph updating in real time.
+      PROMPT
+    end
+
+    private def chat_tool_loop(history : Arcana::Chat::History, card_id : String?, viewscreen : String? = nil) : String
+      provider = @chat_provider.not_nil!
+      max_rounds = 10
+      last_content = ""
+
+      max_rounds.times do
+        # Build messages with viewscreen injected before the last user message
+        messages = inject_viewscreen(history.messages, viewscreen)
+
+        request = Arcana::Chat::Request.new(
+          messages: messages,
+          model: provider.model,
+          temperature: 0.7,
+          max_tokens: 4096,
+          tools: @chat_tools,
+          tool_choice: "auto"
+        )
+
+        response = provider.complete(request)
+
+        if response.has_tool_calls?
+          # Add assistant message with tool calls
+          history.messages << Arcana::Chat::Message.new(
+            role: "assistant",
+            content: response.content,
+            tool_calls: response.tool_calls
+          )
+
+          # Execute each tool call
+          response.tool_calls.each do |tc|
+            result = execute_chat_tool(tc, card_id)
+            history.messages << Arcana::Chat::Message.new(
+              role: "tool",
+              content: result,
+              tool_call_id: tc.id
+            )
+          end
+
+          history.trim_if_needed
+        else
+          last_content = response.content || ""
+          history.add_assistant(last_content)
+          break
+        end
+      end
+
+      last_content
+    end
+
+    private def execute_chat_tool(tc : Arcana::Chat::ToolCall, default_card_id : String?) : String
+      args = tc.parsed_arguments
+      card_id = args["card_id"]?.try(&.as_s?) || default_card_id || ""
+
+      case tc.function.name
+      when "get_graph"
+        slot = @slots[card_id]?
+        if slot && (b = slot.builder)
+          # Return the built model's config as a summary
+          {card_id: card_id, summary: b.summary}.to_json
+        else
+          # Try to find saved graph
+          hash_dirs = Dir.glob(File.join(@saves_dir, "*", "graph.json"))
+          {card_id: card_id, status: "no model built", note: "Use build_model first"}.to_json
+        end
+
+      when "get_model_summary"
+        slot = @slots[card_id]?
+        if slot && (b = slot.builder)
+          b.summary.to_json
+        else
+          {error: "No model built for card #{card_id}"}.to_json
+        end
+
+      when "list_components"
+        components_path = File.join(STATIC_DIR, "components.json")
+        if File.exists?(components_path)
+          File.read(components_path)
+        else
+          {error: "components.json not found"}.to_json
+        end
+
+      when "update_graph"
+        graph_json = args["graph"]?
+        if graph_json
+          {updated: true, card_id: card_id, note: "Graph updated. The frontend should reload."}.to_json
+        else
+          {error: "No graph provided"}.to_json
+        end
+
+      when "build_model"
+        slot = slot_for(card_id)
+        # Look for graph data in saves
+        graph_found = false
+        Dir.glob(File.join(@saves_dir, "*", "graph.json")).each do |path|
+          begin
+            graph_data = GraphData.from_json(File.read(path))
+            config = ConstructionKit.extract_config(graph_data)
+            slot.builder = Builder.new(config)
+            graph_found = true
+            break
+          rescue
+            next
+          end
+        end
+        if graph_found && (b = slot.builder)
+          {built: true, summary: b.summary}.to_json
+        else
+          {error: "Could not build model — no valid graph found"}.to_json
+        end
+
+      when "train_model"
+        slot = @slots[card_id]?
+        steps = args["steps"]?.try(&.as_i?) || 1000
+        if slot && slot.builder
+          if slot.training
+            {error: "Already training"}.to_json
+          else
+            start_training(slot, steps)
+            {started: true, steps: steps}.to_json
+          end
+        else
+          {error: "No model built — build first"}.to_json
+        end
+
+      when "generate_text"
+        slot = @slots[card_id]?
+        seed = args["seed"]?.try(&.as_s?) || "First Citizen:\n"
+        max_tokens = args["max_tokens"]?.try(&.as_i?) || 200
+        temperature = args["temperature"]?.try(&.as_f?) || 0.8
+        if slot && (b = slot.builder)
+          text = b.generate(seed, max_tokens, temperature)
+          {text: text}.to_json
+        else
+          {error: "No model built"}.to_json
+        end
+
+      when "get_training_status"
+        slot = @slots[card_id]?
+        if slot
+          {
+            training: slot.training,
+            step: slot.train_step,
+            steps: slot.train_steps,
+            avg_loss: slot.avg_loss,
+          }.to_json
+        else
+          {training: false, step: 0, note: "No session for this card"}.to_json
+        end
+
+      else
+        {error: "Unknown tool: #{tc.function.name}"}.to_json
+      end
     end
 
     private def serve_static(ctx, path)

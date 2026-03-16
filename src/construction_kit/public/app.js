@@ -85,7 +85,7 @@ const SCOPE_LEVELS = {
   ensemble: {
     label: "Ensemble",
     components: ["transformer", "counter", "bigram", "global_router", "context_router", "gated_router", "stream_projector", "optimizer"],
-    containers: { transformer: "transformer_internal", counter: "expert_internal" },
+    containers: { transformer: "transformer_internal", counter: "expert_internal", global_router: "global_router_internal" },
   },
   transformer_internal: {
     label: "Transformer",
@@ -115,6 +115,11 @@ const SCOPE_LEVELS = {
   ffn_internal: {
     label: "Feed-Forward",
     components: ["matmul", "add_bias", "relu", "weight_param", "bias_param"],
+    containers: {},
+  },
+  global_router_internal: {
+    label: "Global Router",
+    components: ["mean_pool", "matmul", "add_bias", "weight_param", "bias_param", "softmax", "eps_blend", "broadcast"],
     containers: {},
   },
   layer_norm_internal: {
@@ -202,6 +207,7 @@ const draftEdge  = document.getElementById('draft-edge');
 const paletteList = document.getElementById('palette-list');
 // props-content removed — properties now rendered in topbar
 const statusEl   = document.getElementById('status');
+const scopeInfoEl = document.getElementById('scope-info');
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 
@@ -221,6 +227,8 @@ async function init() {
   setupD3Zoom();
   setupCanvasEvents();
   setupCards();
+  setupLeftPanel();
+  setupChat();
   loadDemo();
   renderBreadcrumbs();
   updateStatus();
@@ -430,7 +438,14 @@ function navigateToNodeInTree(nodeId, scopePath) {
 function renderBreadcrumbs() {
   const el = document.getElementById('breadcrumbs');
 
-  let html = `<span class="crumb clickable" data-depth="-1">Project</span>`;
+  let html = '';
+
+  // Back button when inside a scope
+  if (state.scopeStack.length > 0) {
+    html += `<span class="crumb-back" id="back-btn" title="Go back (Esc)">\u21B0</span>`;
+  }
+
+  html += `<span class="crumb clickable" data-depth="-1">Project</span>`;
   // Walk the scope stack to find each node's component color
   let graph = state.rootGraph;
   state.scopeStack.forEach((scope, i) => {
@@ -443,6 +458,14 @@ function renderBreadcrumbs() {
   });
 
   el.innerHTML = html;
+
+  // Bind back button
+  const backBtn = document.getElementById('back-btn');
+  if (backBtn) {
+    backBtn.addEventListener('click', () => {
+      navigateToDepth(state.scopeStack.length - 2);
+    });
+  }
 
   // Bind click handlers
   el.querySelectorAll('.crumb.clickable').forEach(crumb => {
@@ -804,6 +827,9 @@ function getDefaultChildren(type, params) {
   if (type === 'embedding') {
     return getEmbeddingDefaults(params);
   }
+  if (type === 'global_router') {
+    return getGlobalRouterDefaults(params);
+  }
   if (type === 'ffn_layer') {
     return getFFNDefaults(params);
   }
@@ -990,6 +1016,50 @@ function getEmbeddingDefaults(params) {
       { id: id(), from: { nodeId: tableId, portId: 'out' }, to: { nodeId: lookupId, portId: 'table' } },
       // lookup out → boundary output
       { id: id(), from: { nodeId: lookupId, portId: 'out' }, to: { nodeId: -1, portId: 'out' } },
+    ],
+  };
+}
+
+function getGlobalRouterDefaults(params) {
+  const sd = params.stream_dim || 64;
+  const nr = params.n_experts || 2;
+  const eps = params.epsilon || 0.2;
+  const id = () => state.nextId++;
+
+  // mean_pool(stream) → W·x + b → softmax → ε-blend → broadcast
+  const poolId = id(), wId = id(), mmId = id(), bId = id(), addId = id();
+  const smId = id(), blendId = id(), bcastId = id();
+
+  return {
+    nodes: [
+      { id: poolId,  type: "mean_pool",    x: 300, y: 40,  params: { dim: sd } },
+      { id: wId,     type: "weight_param", x: 60,  y: 200, params: { rows: sd, cols: nr } },
+      { id: mmId,    type: "matmul",       x: 300, y: 200, params: { d_in: sd, d_out: nr } },
+      { id: bId,     type: "bias_param",   x: 60,  y: 360, params: { dim: nr } },
+      { id: addId,   type: "add_bias",     x: 300, y: 360, params: { dim: nr } },
+      { id: smId,    type: "softmax",      x: 300, y: 520, params: { dim: nr } },
+      { id: blendId, type: "eps_blend",    x: 300, y: 680, params: { n_experts: nr, epsilon: eps } },
+      { id: bcastId, type: "broadcast",    x: 300, y: 840, params: { dim: nr } },
+    ],
+    edges: [
+      // boundary stream → mean pool
+      { id: id(), from: { nodeId: -1, portId: 'stream_in' }, to: { nodeId: poolId, portId: 'in' } },
+      // mean pool → matmul x
+      { id: id(), from: { nodeId: poolId, portId: 'out' }, to: { nodeId: mmId, portId: 'x' } },
+      // W → matmul
+      { id: id(), from: { nodeId: wId, portId: 'out' }, to: { nodeId: mmId, portId: 'W' } },
+      // matmul → add_bias
+      { id: id(), from: { nodeId: mmId, portId: 'out' }, to: { nodeId: addId, portId: 'x' } },
+      // b → add_bias
+      { id: id(), from: { nodeId: bId, portId: 'out' }, to: { nodeId: addId, portId: 'b' } },
+      // add_bias → softmax
+      { id: id(), from: { nodeId: addId, portId: 'out' }, to: { nodeId: smId, portId: 'in' } },
+      // softmax → ε-blend
+      { id: id(), from: { nodeId: smId, portId: 'out' }, to: { nodeId: blendId, portId: 'in' } },
+      // ε-blend → broadcast
+      { id: id(), from: { nodeId: blendId, portId: 'out' }, to: { nodeId: bcastId, portId: 'in' } },
+      // broadcast → boundary logits output
+      { id: id(), from: { nodeId: bcastId, portId: 'out' }, to: { nodeId: -1, portId: 'logits_out' } },
     ],
   };
 }
@@ -2092,9 +2162,18 @@ function setupPalettePopup() {
     }
   });
 
-  // Mouse leaving the popup closes it
+  // Mouse leaving the popup closes it (unless pinned open by a button)
   popup.addEventListener('mouseleave', (e) => {
+    if (palettePinned) return;
     if (e.clientY < popup.getBoundingClientRect().top + 10) {
+      popup.classList.remove('open');
+    }
+  });
+
+  // Click on canvas area clears pin and closes popup
+  wrap.addEventListener('click', (e) => {
+    if (palettePinned && !popup.contains(e.target)) {
+      palettePinned = false;
       popup.classList.remove('open');
     }
   });
@@ -2395,8 +2474,7 @@ function clearCanvas(silent) {
 
 function updateStatus() {
   const scopeLabel = SCOPE_LEVELS[state.currentScope]?.label || state.currentScope;
-  const hint = state.scopeStack.length > 0 ? ' | Esc to go back' : '';
-  statusEl.textContent = `${scopeLabel}: ${state.nodes.length} components, ${state.edges.length} connections | Scroll to zoom, drag to pan${hint}`;
+  scopeInfoEl.textContent = `${scopeLabel}: ${state.nodes.length} components, ${state.edges.length} connections`;
 }
 
 function setStatus(msg, { flash } = {}) {
@@ -2658,6 +2736,7 @@ async function doResetWeights() {
   const eng = card.engine;
   if (!eng.built) return;
   if (eng.training) { setStatus('Cannot reset while training', { flash: true }); return; }
+  if (!confirm('Reset all weights to random initialization? Training progress will be lost.')) return;
   try {
     const resetPipeline = getPipelineGraph(card || getActiveCard());
     const payload = { version: 2, graph: serializeGraph(resetPipeline), card_id: card.id };
@@ -2875,9 +2954,14 @@ async function doStopAll() {
   setStatus('Training stopped.');
 }
 
+let palettePinned = false;
+
 function togglePaletteTab(tab, forceOpen) {
   const popup = document.getElementById('palette-popup');
-  if (forceOpen !== false) popup.classList.add('open');
+  if (forceOpen !== false) {
+    popup.classList.add('open');
+    palettePinned = true;
+  }
   document.querySelectorAll('.palette-tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.palette-tab-pane').forEach(p => p.classList.remove('active'));
   document.querySelector(`.palette-tab-btn[data-tab="${tab}"]`)?.classList.add('active');
@@ -3000,6 +3084,178 @@ function setupCards() {
     document.getElementById('runs-popup').style.display = 'none';
   });
   document.getElementById('import-file').addEventListener('change', importGraph);
+  document.getElementById('btn-pick-data').addEventListener('click', showDataFilePicker);
+  document.getElementById('btn-save-project').addEventListener('click', doSaveProject);
+  document.getElementById('btn-load-project').addEventListener('click', showProjectsPicker);
+  document.getElementById('projects-close').addEventListener('click', () => {
+    document.getElementById('projects-popup').style.display = 'none';
+  });
+}
+
+async function showDataFilePicker() {
+  try {
+    const data = await fetchJSON('/api/data-files', {});
+    const files = data.files || [];
+    if (files.length === 0) {
+      setStatus('No .txt files found in data/', { flash: true });
+      return;
+    }
+
+    // Remove existing picker if any
+    document.getElementById('data-file-dropdown')?.remove();
+
+    const btn = document.getElementById('btn-pick-data');
+    const dropdown = document.createElement('div');
+    dropdown.id = 'data-file-dropdown';
+    dropdown.className = 'data-file-dropdown';
+    files.forEach(f => {
+      const item = document.createElement('div');
+      item.className = 'data-file-option';
+      item.textContent = f;
+      item.addEventListener('click', () => {
+        document.getElementById('train-data-file').value = f;
+        dropdown.remove();
+      });
+      dropdown.appendChild(item);
+    });
+
+    btn.parentElement.style.position = 'relative';
+    btn.parentElement.appendChild(dropdown);
+
+    // Close on outside click
+    const close = (e) => {
+      if (!dropdown.contains(e.target) && e.target !== btn) {
+        dropdown.remove();
+        document.removeEventListener('click', close);
+      }
+    };
+    setTimeout(() => document.addEventListener('click', close), 0);
+  } catch (err) {
+    setStatus('Error listing files: ' + err.message, { flash: true });
+  }
+}
+
+let lastProjectName = '';
+
+async function doSaveProject() {
+  // Require all cards to be built (so their graph.json exists on disk)
+  const unbuilt = cards.filter(c => !c.engine.modelHash);
+  if (unbuilt.length > 0) {
+    alert(`${unbuilt.length} engine(s) haven't been built yet. Build all engines before saving a project.`);
+    return;
+  }
+  const name = prompt('Project name:', lastProjectName);
+  if (!name || !name.trim()) return;
+  lastProjectName = name.trim();
+  try {
+    const engines = cards.map(c => ({
+      hash: c.engine.modelHash,
+      card_name: c.name,
+      starred: c.starred,
+    }));
+    const data = await apiPost('/api/project/save', { name: name.trim(), engines });
+    if (data.saved) {
+      setStatus('Project saved: ' + name.trim());
+    } else {
+      setStatus(data.error || 'Save failed', { flash: true });
+    }
+  } catch (err) {
+    setStatus('Save error: ' + err.message, { flash: true });
+  }
+}
+
+async function showProjectsPicker() {
+  try {
+    const data = await fetchJSON('/api/projects', { projects: [] });
+    const projects = data.projects || [];
+    const list = document.getElementById('projects-list');
+
+    if (projects.length === 0) {
+      list.innerHTML = '<div class="runs-empty">No saved projects</div>';
+    } else {
+      list.innerHTML = projects.map(p => `
+        <div class="project-item" data-name="${p.name}">
+          <div>
+            <div class="project-name">${p.name}</div>
+            <div class="project-meta">${p.engine_count} engine(s) &middot; ${p.saved_at ? new Date(p.saved_at).toLocaleDateString() : ''}</div>
+          </div>
+          <button class="project-delete" data-name="${p.name}" title="Delete project">&times;</button>
+        </div>
+      `).join('');
+    }
+
+    const popup = document.getElementById('projects-popup');
+    popup.style.display = 'block';
+
+    // Bind click to load
+    list.querySelectorAll('.project-item').forEach(item => {
+      item.addEventListener('click', async (e) => {
+        if (e.target.closest('.project-delete')) return;
+        const name = item.dataset.name;
+        if (!confirm(`Load project "${name}"? Current workspace will be replaced.`)) return;
+        popup.style.display = 'none';
+        await doLoadProject(name);
+      });
+    });
+
+    // Bind delete
+    list.querySelectorAll('.project-delete').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const name = btn.dataset.name;
+        if (!confirm(`Delete project "${name}"?`)) return;
+        await apiPost('/api/project', { name }, 'DELETE');
+        showProjectsPicker(); // refresh list
+      });
+    });
+  } catch (err) {
+    setStatus('Error listing projects: ' + err.message, { flash: true });
+  }
+}
+
+async function doLoadProject(name) {
+  try {
+    const data = await apiPost('/api/project/load', { name });
+    if (data.error) { setStatus(data.error, { flash: true }); return; }
+
+    // Close any active training WebSockets
+    cards.forEach(c => {
+      if (c.engine._trainWs) { c.engine._trainWs.close(); c.engine._trainWs = null; }
+    });
+
+    // Reset project state
+    cards.length = 0;
+    projectGraph.nodes.length = 0;
+    projectGraph.edges.length = 0;
+    projectNextId = 1;
+
+    // Reconstruct cards
+    for (const eng of data.engines) {
+      const card = createEmptyCard(eng.card_name);
+      card.starred = eng.starred;
+      card.engine.modelHash = eng.hash;
+
+      if (eng.graph) {
+        const engineNode = projectGraph.nodes.find(n => n.id === card.nodeId);
+        engineNode.children = deserializeGraph(eng.graph);
+      }
+
+      cards.push(card);
+    }
+
+    // If empty project, add a default card
+    if (cards.length === 0) {
+      cards.push(createEmptyCard('Engine 1'));
+    }
+
+    activeCardIdx = 0;
+    lastProjectName = name;
+    loadCardIntoCanvas(0);
+    renderCardList();
+    setStatus('Project loaded: ' + name);
+  } catch (err) {
+    setStatus('Load error: ' + err.message, { flash: true });
+  }
 }
 
 function addCard() {
@@ -3159,12 +3415,12 @@ function renderExpandedCard(card) {
     const s = eng.summary;
     modelInfoHtml = `
       <div style="padding:8px 12px;font-size:11px;border-bottom:1px solid var(--border)">
-        <div class="mi-row"><span class="mi-label">Params</span><span class="mi-value">${fmtParams(s.total_params)}</span></div>
-        <div class="mi-row"><span class="mi-label">Experts</span><span class="mi-value">${s.n_experts}</span></div>
-        <div class="mi-row"><span class="mi-label">Stream</span><span class="mi-value">d=${s.stream_dim}</span></div>
-        <div class="mi-row"><span class="mi-label">Router</span><span class="mi-value">${s.router}</span></div>
-        <div class="mi-row"><span class="mi-label">Vocab</span><span class="mi-value">${s.vocab_size}</span></div>
-        ${eng.modelHash ? `<div class="mi-row"><span class="mi-label">Hash</span><span class="mi-value" title="${eng.modelHash}">${eng.modelHash.slice(0, 8)}</span></div>` : ''}
+        <div class="mi-row"><img class="mi-icon" src="svg/params.svg" title="Params"><span class="mi-value">${fmtParams(s.total_params)}</span></div>
+        <div class="mi-row"><img class="mi-icon" src="svg/expert.svg" title="Experts"><span class="mi-value">${s.n_experts}</span></div>
+        <div class="mi-row"><img class="mi-icon" src="svg/stream.svg" title="Stream"><span class="mi-value">d=${s.stream_dim}</span></div>
+        <div class="mi-row"><img class="mi-icon" src="svg/router.svg" title="Router"><span class="mi-value">${s.router}</span></div>
+        <div class="mi-row"><img class="mi-icon" src="svg/vocab.svg" title="Vocab"><span class="mi-value">${s.vocab_size}</span></div>
+        ${eng.modelHash ? `<div class="mi-row"><img class="mi-icon" src="svg/hash.svg" title="Hash"><span class="mi-value" title="${eng.modelHash}">${eng.modelHash.slice(0, 8)}</span></div>` : ''}
       </div>
     `;
   }
@@ -3185,12 +3441,10 @@ function renderExpandedCard(card) {
       </div>
       ${modelInfoHtml}
       ${eng.built ? `
-        <div style="padding:0 12px 6px;text-align:right">
-          <button class="toolbar-btn btn-reset-weights" style="font-size:11px;padding:2px 8px" ${dis}>Reset Weights</button>
-        </div>
-        <div class="prop-group">
-          <button class="toolbar-btn engine-btn btn-manual-test" style="width:100%">Test Console</button>
-          <button class="toolbar-btn btn-runs" style="width:100%;margin-top:4px;font-size:11px">Prior Runs</button>
+        <div class="prop-group" style="display:flex;gap:4px">
+          <button class="toolbar-btn btn-runs" title="Prior Runs" style="flex:1"><img class="btn-icon" src="svg/prior.svg"></button>
+          <button class="toolbar-btn engine-btn btn-manual-test" title="Test Console" style="flex:1"><img class="btn-icon" src="svg/test.svg"></button>
+          <button class="toolbar-btn btn-reset-weights" title="Reset Weights" style="flex:1" ${dis}><img class="btn-icon" src="svg/reset.svg"></button>
         </div>
       ` : ''}
     </div>
@@ -3307,6 +3561,97 @@ function drawSessionChart(canvasEl) {
   ctx.fillText(minL.toFixed(2), 2, h - 2);
 }
 
+
+// ── Left Panel Tabs ─────────────────────────────────────────────────────────
+
+function setupLeftPanel() {
+  document.querySelectorAll('.left-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.left-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.left-tab-pane').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(`left-tab-${btn.dataset.tab}`)?.classList.add('active');
+    });
+  });
+}
+
+// ── Chat ─────────────────────────────────────────────────────────────────────
+
+let chatSessionId = crypto.randomUUID();
+let chatContextSent = false;  // only send context once per session/card switch
+
+function setupChat() {
+  const input = document.getElementById('chat-input');
+  const sendBtn = document.getElementById('btn-chat-send');
+
+  sendBtn.addEventListener('click', () => sendChatMessage());
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  });
+}
+
+function appendChatMessage(role, text) {
+  const container = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = `chat-msg ${role}`;
+  if (role === 'assistant') {
+    div.innerHTML = text;
+  } else {
+    div.textContent = text;
+  }
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return div;
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById('chat-input');
+  const message = input.value.trim();
+  if (!message) return;
+
+  input.value = '';
+  appendChatMessage('user', message);
+
+  const thinkingEl = appendChatMessage('assistant', '...');
+  thinkingEl.classList.add('thinking');
+
+  const card = getActiveCard();
+  // Build viewscreen context (sent every time, but not stored in history)
+  let viewscreen = null;
+  if (card) {
+    const engineNode = projectGraph.nodes.find(n => n.id === card.nodeId);
+    viewscreen = {
+      card_name: card.name,
+      starred: card.starred,
+      built: card.engine.built,
+      model_hash: card.engine.modelHash,
+      summary: card.engine.summary || null,
+      graph: engineNode?.children ? serializeGraph(engineNode.children) : null,
+    };
+  }
+  try {
+    const data = await apiPost('/api/chat', {
+      message,
+      session_id: chatSessionId,
+      card_id: card?.id,
+      viewscreen,
+    });
+
+    thinkingEl.remove();
+
+    if (data.error) {
+      appendChatMessage('assistant', 'Error: ' + data.error);
+    } else {
+      appendChatMessage('assistant', data.reply || '(no response)');
+    }
+  } catch (err) {
+    thinkingEl.remove();
+    appendChatMessage('assistant', 'Error: ' + err.message);
+  }
+}
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 

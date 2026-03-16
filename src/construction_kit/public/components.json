@@ -565,6 +565,75 @@
       }
     },
     {
+      "type": "softmax",
+      "label": "Softmax",
+      "category": "math",
+      "color": "#d9a04a",
+      "ports": {
+        "in": [
+          {"id": "in", "label": "in", "dataType": "matrix", "shape": [null, "dim"]}
+        ],
+        "out": [
+          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "dim"]}
+        ]
+      },
+      "params": {
+        "dim": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+      }
+    },
+    {
+      "type": "eps_blend",
+      "label": "ε-Blend",
+      "category": "math",
+      "color": "#d9a04a",
+      "ports": {
+        "in": [
+          {"id": "in", "label": "probs", "dataType": "matrix", "shape": [null, "n_experts"]}
+        ],
+        "out": [
+          {"id": "out", "label": "blended", "dataType": "matrix", "shape": [null, "n_experts"]}
+        ]
+      },
+      "params": {
+        "n_experts": {"type": "int", "default": 2},
+        "epsilon": {"type": "float", "default": 0.2, "min": 0.0, "max": 1.0, "step": 0.05}
+      }
+    },
+    {
+      "type": "mean_pool",
+      "label": "Mean Pool",
+      "category": "math",
+      "color": "#d9a04a",
+      "ports": {
+        "in": [
+          {"id": "in", "label": "in", "dataType": "matrix", "shape": [null, "dim"]}
+        ],
+        "out": [
+          {"id": "out", "label": "out", "dataType": "vector", "shape": ["dim"]}
+        ]
+      },
+      "params": {
+        "dim": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+      }
+    },
+    {
+      "type": "broadcast",
+      "label": "Broadcast",
+      "category": "math",
+      "color": "#d9a04a",
+      "ports": {
+        "in": [
+          {"id": "in", "label": "in", "dataType": "vector", "shape": ["dim"]}
+        ],
+        "out": [
+          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "dim"]}
+        ]
+      },
+      "params": {
+        "dim": {"type": "int", "default": 2}
+      }
+    },
+    {
       "type": "relu",
       "label": "ReLU",
       "category": "math",

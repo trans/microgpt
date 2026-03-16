@@ -8,9 +8,21 @@
 </head>
 <body>
   <div id="app">
-    <div id="tree-panel">
-      <h2>Model Tree</h2>
-      <div id="tree-content"></div>
+    <div id="left-panel">
+      <div id="left-tabs">
+        <div class="left-tab-btn active" data-tab="tree">Tree</div>
+        <div class="left-tab-btn" data-tab="chat">Chat</div>
+      </div>
+      <div id="left-tab-tree" class="left-tab-pane active">
+        <div id="tree-content"></div>
+      </div>
+      <div id="left-tab-chat" class="left-tab-pane">
+        <div id="chat-messages"></div>
+        <div id="chat-input-wrap">
+          <input type="text" id="chat-input" placeholder="Ask about your model..." autocomplete="off">
+          <button id="btn-chat-send" class="toolbar-btn">Send</button>
+        </div>
+      </div>
     </div>
 
     <div id="canvas-wrap">
@@ -40,8 +52,8 @@
       <div id="palette-popup">
         <div id="palette-tabs">
           <div class="palette-tab-btn active" data-tab="components" title="Components">&#9881;</div>
-          <div class="palette-tab-btn" data-tab="train" title="Train Console">&#9866;</div>
-          <div class="palette-tab-btn" data-tab="test" title="Test Console">&#9654;</div>
+          <div class="palette-tab-btn" data-tab="train" title="Train Console"><img class="btn-icon" src="svg/train.svg"></div>
+          <div class="palette-tab-btn" data-tab="test" title="Test Console"><img class="btn-icon" src="svg/test.svg"></div>
         </div>
         <div id="palette-tab-content">
           <div id="palette-tab-components" class="palette-tab-pane active">
@@ -54,9 +66,16 @@
           </div>
           <div id="palette-tab-train" class="palette-tab-pane">
             <div id="train-panel-controls">
+              <div class="train-field train-actions">
+                <button class="toolbar-btn engine-btn" id="btn-train-all">Train <span style="font-size:16px">&#9733;</span></button>
+                <button class="toolbar-btn danger" id="btn-stop-all" style="display:none">Stop All</button>
+              </div>
               <div class="train-field">
                 <label>data</label>
-                <input type="text" id="train-data-file" value="data/input.txt" placeholder="path to text file">
+                <div class="data-file-wrap">
+                  <input type="text" id="train-data-file" value="data/input.txt" placeholder="path to text file">
+                  <button class="toolbar-btn" id="btn-pick-data" title="Browse data files" style="padding:4px 6px;font-size:12px">...</button>
+                </div>
               </div>
               <div class="train-field">
                 <label>label</label>
@@ -65,10 +84,6 @@
               <div class="train-field">
                 <label>steps</label>
                 <input type="number" id="train-steps" value="1000" min="10" max="100000" step="100">
-              </div>
-              <div class="train-field train-actions">
-                <button class="toolbar-btn engine-btn" id="btn-train-all">Train &#9733;</button>
-                <button class="toolbar-btn danger" id="btn-stop-all" style="display:none">Stop All</button>
               </div>
             </div>
             <div id="train-panel-session"></div>
@@ -82,7 +97,8 @@
           </div>
         </div>
       </div>
-      <div id="status">Drag components from the palette. Scroll to zoom. Click ports to connect.</div>
+      <div id="scope-info"></div>
+      <div id="status">Scroll to zoom, drag to pan</div>
       <div id="legend">
         <h4>Ports</h4>
         <div class="legend-row"><div class="legend-port hollow" style="border-color:#4a90d9"></div> Input (hollow)</div>
@@ -106,6 +122,10 @@
     <div id="props-panel">
       <div id="cards-header">
         <h2>Engines</h2>
+        <div style="display:flex;gap:4px">
+          <button id="btn-save-project" class="toolbar-btn" title="Save project" style="font-size:11px;padding:2px 6px">Save</button>
+          <button id="btn-load-project" class="toolbar-btn" title="Load project" style="font-size:11px;padding:2px 6px">Load</button>
+        </div>
       </div>
       <div id="cards-list"></div>
     </div>
@@ -114,6 +134,10 @@
 <div id="runs-popup">
     <div class="runs-header"><span>Prior Runs</span><span class="runs-close" id="runs-close">&times;</span></div>
     <div class="runs-list" id="runs-list"></div>
+  </div>
+  <div id="projects-popup">
+    <div class="runs-header"><span>Projects</span><span class="runs-close" id="projects-close">&times;</span></div>
+    <div class="runs-list" id="projects-list"></div>
   </div>
   <input type="file" id="import-file" style="display:none">
   <script src="d3.min.js"></script>
