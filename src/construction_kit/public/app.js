@@ -166,6 +166,7 @@ function createEmptyCard(name) {
       lossHistory: [],
       modelHash: null,
     },
+    graphMode: false,
   };
 }
 
@@ -851,6 +852,9 @@ function getCooperativeDefaults(params) {
       { id: n3, type: "global_router", x: 400, y: 130, params: { stream_dim: sd, epsilon: 0.2 } },
     ],
     edges: [
+      // Boundary tokens → both experts
+      { id: id(), from: { nodeId: -1, portId: 'token_ids' }, to: { nodeId: n1, portId: 'token_ids' } },
+      { id: id(), from: { nodeId: -1, portId: 'token_ids' }, to: { nodeId: n2, portId: 'token_ids' } },
       // Boundary stream → Expert A
       { id: id(), from: { nodeId: -1, portId: 'stream_in' }, to: { nodeId: n1, portId: 'stream_in' } },
       // Expert A stream → Expert B (cooperative chaining)
@@ -881,14 +885,22 @@ function getTransformerDefaults(params) {
   let lastId = null, lastPort = null;
   let row = 0;
 
-  // Stream projection in (if stream_dim != d_model)
+  // Embedding: tokens → [d_model] vectors
+  const embId = id();
+  nodes.push({ id: embId, type: "embedding", x: 100, y: row * yStep + 60, params: { d_model: dm } });
+  edges.push({ id: id(), from: { nodeId: -1, portId: 'token_ids' }, to: { nodeId: embId, portId: 'in' } });
+  lastId = embId; lastPort = 'out';
+
+  // Stream projection in (if stream_dim != d_model) — adds to embedding output
   if (sd !== dm) {
     const projIn = id();
-    nodes.push({ id: projIn, type: "stream_proj_internal", x: 100, y: row * yStep + 60, params: { d_in: sd, d_out: dm } });
+    nodes.push({ id: projIn, type: "stream_proj_internal", x: 100 + xStep, y: row * yStep + 60, params: { d_in: sd, d_out: dm } });
     edges.push({ id: id(), from: { nodeId: -1, portId: 'stream_in' }, to: { nodeId: projIn, portId: 'in' } });
-    lastId = projIn; lastPort = 'out';
-    row++;
+    // TODO: visually show additive combination of embedding + stream projection
+  } else {
+    // Stream feeds directly (same dim, additive with embedding in the engine)
   }
+  row++;
 
   // Each layer block is a row: LN → Attn → LN → FFN (left to right)
   for (let i = 0; i < nl; i++) {
@@ -2762,7 +2774,8 @@ async function doBuild(card) {
     const pipelineGraph = getPipelineGraph(card);
     const clientHash = await computeModelHash(pipelineGraph);
     const dataFile = document.getElementById('train-data-file')?.value?.trim() || 'data/input.txt';
-    const payload = { version: 2, graph: serializeGraph(pipelineGraph), card_id: card.id, hash: clientHash, data_file: dataFile };
+    const graphMode = card.graphMode || false;
+    const payload = { version: 2, graph: serializeGraph(pipelineGraph), card_id: card.id, hash: clientHash, data_file: dataFile, graph_mode: graphMode };
     const data = await apiPost('/api/build', payload);
 
     if (data.built) {
@@ -3439,6 +3452,11 @@ function renderExpandedCard(card) {
         <button class="toolbar-btn btn-export" style="flex:1;font-size:12px;padding:4px 8px">Export</button>
         <button class="toolbar-btn btn-import" style="flex:1;font-size:12px;padding:4px 8px">Import</button>
       </div>
+      <div style="padding:2px 12px">
+        <label style="font-size:11px;color:var(--text-dim);cursor:pointer;display:flex;align-items:center;gap:4px">
+          <input type="checkbox" class="chk-graph-mode" ${card.graphMode ? 'checked' : ''}> Graph execution
+        </label>
+      </div>
       ${modelInfoHtml}
       ${eng.built ? `
         <div class="prop-group" style="display:flex;gap:4px">
@@ -3478,6 +3496,11 @@ function bindExpandedCardEvents(div, card, idx) {
     e.stopPropagation();
     card.starred = !card.starred;
     renderCardList();
+  });
+
+  // Graph mode toggle
+  div.querySelector('.chk-graph-mode')?.addEventListener('change', (e) => {
+    card.graphMode = e.target.checked;
   });
 
   // Engine buttons

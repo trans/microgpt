@@ -5,3 +5,6 @@
 /.shards/
 *.dwarf
 results.tsv
+.env
+/.mcp.json
+

@@ -7,6 +7,7 @@
       "color": "#4a90d9",
       "ports": {
         "in": [
+          {"id": "token_ids", "label": "tokens", "dataType": "token_ids", "shape": [null]},
           {"id": "stream_in", "label": "stream", "dataType": "stream", "shape": [null, "stream_dim"]}
         ],
         "out": [

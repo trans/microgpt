@@ -188,13 +188,14 @@ module ConstructionKit
           end
 
           data_file = params["data_file"]?.try(&.as_s?) || "data/input.txt"
+          graph_mode = params["graph_mode"]?.try(&.as_bool?) || false
           config = ConstructionKit.extract_config(doc.graph, data_file)
           client_hash = params["hash"]?.try(&.as_s?)
           server_hash = compute_graph_hash(doc.graph)
           # Use server hash when available, fall back to client hash
           effective_hash = server_hash || client_hash
           slot = slot_for(card_id)
-          slot.builder = Builder.new(config)
+          slot.builder = Builder.new(config, graph_mode ? doc.graph : nil, graph_mode)
           summary = slot.builder.not_nil!.summary
 
           # Save graph definition under its hash

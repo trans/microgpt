@@ -1,23 +1,43 @@
 require "../microgpt"
 require "./graph"
+require "./compiler"
 
-# Translates a validated graph into runnable Crystal model objects.
-# This is the bridge between the visual construction kit and the
-# existing MicroGPT engine.
+# Translates a validated graph into runnable model objects.
+# Supports two execution modes:
+#   - Legacy: extracts ModelConfig → instantiates CooperativeModel (hardcoded classes)
+#   - Graph:  compiles GraphData → ExecutableGraph (graph-driven execution)
 
 module ConstructionKit
 
   class Builder
     getter dataset : MicroGPT::CharDataset
-    getter model : MicroGPT::CooperativeModel
     getter config : ModelConfig
 
-    def initialize(@config : ModelConfig)
+    # Legacy mode
+    getter model : MicroGPT::CooperativeModel?
+
+    # Graph mode
+    getter exec_graph : ExecutableGraph?
+    getter? graph_mode : Bool
+
+    def initialize(@config : ModelConfig, @graph_data : GraphData? = nil, @graph_mode : Bool = false)
       # Load dataset
       text = File.read(@config.data_file)
       @dataset = MicroGPT::CharDataset.new(text)
 
-      # Build expert configs
+      if @graph_mode && (gd = @graph_data)
+        # Graph-driven execution
+        compiler = Compiler.new(@dataset.vocab_size, @config.seq_len)
+        @exec_graph = compiler.compile(gd)
+        @model = nil
+      else
+        # Legacy execution
+        @exec_graph = nil
+        build_legacy_model
+      end
+    end
+
+    private def build_legacy_model
       expert_configs = @config.expert_specs.map do |spec|
         cfg = MicroGPT::Config.new
         cfg.vocab_size = @dataset.vocab_size
@@ -30,7 +50,6 @@ module ConstructionKit
         cfg
       end
 
-      # Build router
       nr = @config.has_counter ? expert_configs.size - 1 : expert_configs.size
       nr = Math.max(nr, 1)
       router = case @config.router_type
@@ -43,7 +62,6 @@ module ConstructionKit
                end
       router.epsilon = @config.router_epsilon
 
-      # Build cooperative model
       @model = MicroGPT::CooperativeModel.new(
         expert_configs,
         @config.stream_dim,
@@ -55,16 +73,25 @@ module ConstructionKit
     # Run a single training step, return metrics
     def train_step : StepResult
       input, targets = @dataset.sample(@config.seq_len, 0)
-      loss = @model.train_step(input, targets[0])
-      grad_norm = compute_grad_norm
-      StepResult.new(loss, @model.router_weights_str, grad_norm)
+
+      if (eg = @exec_graph)
+        loss = eg.train_step(input, targets[0], @config.learning_rate)
+        StepResult.new(loss, "", 0.0)
+      elsif (m = @model)
+        loss = m.train_step(input, targets[0])
+        grad_norm = compute_grad_norm
+        StepResult.new(loss, m.router_weights_str, grad_norm)
+      else
+        raise "No model or graph built"
+      end
     end
 
-    # Compute L2 norm of all gradients (after backward pass, before they're cleared)
     private def compute_grad_norm : Float64
+      m = @model
+      return 0.0 unless m
       sum_sq = 0.0
-      @model.experts.each_with_index do |expert, i|
-        next if (@model.has_counter || !@model.bigram_table.nil?) && i == 0
+      m.experts.each_with_index do |expert, i|
+        next if (m.has_counter || !m.bigram_table.nil?) && i == 0
         expert.blocks.each do |b|
           sum_sq += mat_sq_sum(b.attn.wq.dw) + mat_sq_sum(b.attn.wk.dw) +
                     mat_sq_sum(b.attn.wv.dw) + mat_sq_sum(b.attn.wo.dw)
@@ -72,8 +99,8 @@ module ConstructionKit
         end
         sum_sq += mat_sq_sum(expert.output.proj.dw)
       end
-      @model.w_reads.each { |l| sum_sq += mat_sq_sum(l.dw) }
-      @model.w_writes.each { |l| sum_sq += mat_sq_sum(l.dw) }
+      m.w_reads.each { |l| sum_sq += mat_sq_sum(l.dw) }
+      m.w_writes.each { |l| sum_sq += mat_sq_sum(l.dw) }
       Math.sqrt(sum_sq)
     end
 
@@ -86,45 +113,81 @@ module ConstructionKit
     # Generate text from a seed
     def generate(seed_text : String, max_tokens : Int32 = 100, temperature : Float64 = 0.8) : String
       seed_ids = @dataset.encode(seed_text)
-      # Use last seq_len tokens if seed is too long
       if seed_ids.size > @config.seq_len
         seed_ids = seed_ids[-@config.seq_len..]
       end
-      generated = @model.generate(seed_ids, max_tokens, temperature)
-      @dataset.decode(generated)
+
+      if (eg = @exec_graph)
+        generated = eg.generate(seed_ids, max_tokens, temperature, @config.seq_len)
+        @dataset.decode(generated)
+      elsif (m = @model)
+        generated = m.generate(seed_ids, max_tokens, temperature)
+        @dataset.decode(generated)
+      else
+        raise "No model or graph built"
+      end
     end
 
     # Save all model weights to a directory
     def save_weights(dir : String)
       Dir.mkdir_p(dir)
-      @model.experts.each_with_index do |expert, i|
-        expert.save(File.join(dir, "expert_#{i}.model"))
+      if (eg = @exec_graph)
+        # Graph mode: save all weights in traversal order
+        File.open(File.join(dir, "graph_weights.bin"), "wb") do |f|
+          eg.all_weight_mats.each do |mat|
+            f.write_bytes(mat.rows.to_i32, IO::ByteFormat::LittleEndian)
+            f.write_bytes(mat.cols.to_i32, IO::ByteFormat::LittleEndian)
+            mat.raw_data.each { |v| f.write_bytes(v, IO::ByteFormat::LittleEndian) }
+          end
+        end
+        File.write(File.join(dir, "meta.json"), {
+          config:     @config,
+          vocab_size: @dataset.vocab_size,
+          vocab:      @dataset.chars.map(&.to_s),
+          graph_mode: true,
+        }.to_json)
+      elsif (m = @model)
+        m.experts.each_with_index do |expert, i|
+          expert.save(File.join(dir, "expert_#{i}.model"))
+        end
+        save_router(File.join(dir, "router.bin"))
+        File.write(File.join(dir, "meta.json"), {
+          config:     @config,
+          vocab_size: @dataset.vocab_size,
+          vocab:      @dataset.chars.map(&.to_s),
+        }.to_json)
       end
-      # Save router weights
-      save_router(File.join(dir, "router.bin"))
-      # Save metadata
-      File.write(File.join(dir, "meta.json"), {
-        config:     @config,
-        vocab_size: @dataset.vocab_size,
-        vocab:      @dataset.chars.map(&.to_s),
-      }.to_json)
     end
 
     # Load all model weights from a directory
     def load_weights(dir : String)
-      @model.experts.each_with_index do |expert, i|
-        path = File.join(dir, "expert_#{i}.model")
+      if (eg = @exec_graph)
+        path = File.join(dir, "graph_weights.bin")
         if File.exists?(path)
-          expert.load(path)
+          File.open(path, "rb") do |f|
+            eg.all_weight_mats.each do |mat|
+              rows = f.read_bytes(Int32, IO::ByteFormat::LittleEndian)
+              cols = f.read_bytes(Int32, IO::ByteFormat::LittleEndian)
+              raise "Weight shape mismatch" unless rows == mat.rows && cols == mat.cols
+              (rows * cols).times { |i| mat.raw_data[i] = f.read_bytes(Float32, IO::ByteFormat::LittleEndian) }
+            end
+          end
         end
+      elsif (m = @model)
+        m.experts.each_with_index do |expert, i|
+          path = File.join(dir, "expert_#{i}.model")
+          expert.load(path) if File.exists?(path)
+        end
+        router_path = File.join(dir, "router.bin")
+        load_router(router_path) if File.exists?(router_path)
       end
-      router_path = File.join(dir, "router.bin")
-      load_router(router_path) if File.exists?(router_path)
     end
 
     private def save_router(path : String)
+      m = @model
+      return unless m
       File.open(path, "wb") do |f|
-        @model.router.weight_mats.each do |mat|
+        m.router.weight_mats.each do |mat|
           f.write_bytes(mat.rows.to_i32, IO::ByteFormat::LittleEndian)
           f.write_bytes(mat.cols.to_i32, IO::ByteFormat::LittleEndian)
           mat.raw_data.each { |v| f.write_bytes(v, IO::ByteFormat::LittleEndian) }
@@ -133,8 +196,10 @@ module ConstructionKit
     end
 
     private def load_router(path : String)
+      m = @model
+      return unless m
       File.open(path, "rb") do |f|
-        @model.router.weight_mats.each do |mat|
+        m.router.weight_mats.each do |mat|
           rows = f.read_bytes(Int32, IO::ByteFormat::LittleEndian)
           cols = f.read_bytes(Int32, IO::ByteFormat::LittleEndian)
           raise "Router shape mismatch" unless rows == mat.rows && cols == mat.cols
@@ -145,26 +210,41 @@ module ConstructionKit
 
     # Get model summary info
     def summary : ModelSummary
-      experts_info = @config.expert_specs.map_with_index do |spec, i|
-        ExpertInfo.new(
-          index: i,
-          type: spec.type,
-          spec: spec.to_spec_string,
-          params: @model.experts[i].param_count,
+      if (eg = @exec_graph)
+        ModelSummary.new(
+          total_params: eg.total_params,
+          stream_dim: @config.stream_dim,
+          seq_len: @config.seq_len,
+          n_experts: 1,
+          router: "none (single expert)",
+          router_params: 0_i64,
+          experts: [ExpertInfo.new(index: 0, type: "transformer", spec: "graph-driven", params: eg.total_params)],
+          vocab_size: @dataset.vocab_size,
+          data_file: @config.data_file,
         )
+      elsif (m = @model)
+        experts_info = @config.expert_specs.map_with_index do |spec, i|
+          ExpertInfo.new(
+            index: i,
+            type: spec.type,
+            spec: spec.to_spec_string,
+            params: m.experts[i].param_count,
+          )
+        end
+        ModelSummary.new(
+          total_params: m.param_count,
+          stream_dim: @config.stream_dim,
+          seq_len: @config.seq_len,
+          n_experts: @config.expert_specs.size,
+          router: m.router.describe,
+          router_params: m.router.param_count,
+          experts: experts_info,
+          vocab_size: @dataset.vocab_size,
+          data_file: @config.data_file,
+        )
+      else
+        raise "No model or graph built"
       end
-
-      ModelSummary.new(
-        total_params: @model.param_count,
-        stream_dim: @config.stream_dim,
-        seq_len: @config.seq_len,
-        n_experts: @config.expert_specs.size,
-        router: @model.router.describe,
-        router_params: @model.router.param_count,
-        experts: experts_info,
-        vocab_size: @dataset.vocab_size,
-        data_file: @config.data_file,
-      )
     end
   end
 
