@@ -93,9 +93,14 @@ module ConstructionKit
           end
         end
 
-        # Execute forward
-        outputs = node.forward(inputs)
-        activations[node_id] = outputs
+        # Skip nodes with missing required inputs
+        begin
+          outputs = node.forward(inputs)
+          activations[node_id] = outputs
+        rescue ex : KeyError
+          STDERR.puts "Graph forward: skipping node #{node_id} (#{node.type}): #{ex.message}"
+          activations[node_id] = {} of String => Tensor
+        end
       end
 
       # Return loss value
@@ -149,9 +154,13 @@ module ConstructionKit
     # ── Train Step ────────────────────────────────────────────────────────────
 
     def train_step(input_ids : Array(Int32), target_ids : Array(Int32), lr : Float64) : Float64
+      # Provide boundary inputs under all possible port names so edges can match
       boundary = {
-        "in"      => input_ids.as(Tensor),
-        "targets" => target_ids.as(Tensor),
+        "in"         => input_ids.as(Tensor),
+        "input_ids"  => input_ids.as(Tensor),
+        "token_ids"  => input_ids.as(Tensor),
+        "targets"    => target_ids.as(Tensor),
+        "target_ids" => target_ids.as(Tensor),
       }
       loss = forward(boundary)
       backward(lr)
@@ -181,7 +190,11 @@ module ConstructionKit
         window = ids.size > seq_len ? ids[-seq_len..] : ids
         # Forward through all nodes except loss
         activations = {} of String => Hash(String, Tensor)
-        activations["__boundary__"] = {"in" => window.as(Tensor)}
+        activations["__boundary__"] = {
+          "in" => window.as(Tensor),
+          "input_ids" => window.as(Tensor),
+          "token_ids" => window.as(Tensor),
+        }
 
         logits_mat = nil
         @topo_order.each do |node_id|

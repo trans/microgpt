@@ -211,14 +211,37 @@ module ConstructionKit
     # Get model summary info
     def summary : ModelSummary
       if (eg = @exec_graph)
+        # Introspect the compiled graph for summary info
+        expert_nodes = eg.nodes.values.select { |n| n.type == "embedding" }
+        n_experts = Math.max(expert_nodes.size, 1)
+
+        router_node = eg.nodes.values.find { |n| n.type == "global_router" }
+        router_desc = router_node ? "global" : "none"
+        router_params = router_node ? router_node.param_count : 0_i64
+
+        # Group nodes by expert (by ID prefix)
+        expert_infos = [] of ExpertInfo
+        if expert_nodes.size > 0
+          expert_nodes.each_with_index do |emb_node, i|
+            # Find all nodes sharing this expert's prefix
+            prefix = emb_node.id.rpartition(".")[0]
+            expert_params = eg.nodes.values
+              .select { |n| n.id.starts_with?(prefix) }
+              .sum { |n| n.param_count }
+            expert_infos << ExpertInfo.new(index: i, type: "transformer", spec: "graph-driven", params: expert_params)
+          end
+        else
+          expert_infos << ExpertInfo.new(index: 0, type: "unknown", spec: "graph-driven", params: eg.total_params)
+        end
+
         ModelSummary.new(
           total_params: eg.total_params,
           stream_dim: @config.stream_dim,
           seq_len: @config.seq_len,
-          n_experts: 1,
-          router: "none (single expert)",
-          router_params: 0_i64,
-          experts: [ExpertInfo.new(index: 0, type: "transformer", spec: "graph-driven", params: eg.total_params)],
+          n_experts: n_experts,
+          router: router_desc,
+          router_params: router_params,
+          experts: expert_infos,
           vocab_size: @dataset.vocab_size,
           data_file: @config.data_file,
         )

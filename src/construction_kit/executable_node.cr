@@ -230,7 +230,7 @@ module ConstructionKit
   end
 
   # ── Loss (Cross-Entropy) ─────────────────────────────────────────────────────
-  # Inputs:  { "logits" => Mat, "targets" => Array(Int32) }
+  # Inputs:  { "logits_in" => Mat, "targets" => Array(Int32) }
   # Outputs: { } (terminal node — produces loss value and initial gradient)
   # The loss node is special: it computes the loss and produces the gradient
   # that kicks off the backward pass.
@@ -246,8 +246,12 @@ module ConstructionKit
     end
 
     def forward(inputs : Hash(String, Tensor)) : Hash(String, Tensor)
-      logits = inputs["logits"].as(MicroGPT::Mat)
-      targets = inputs["targets"].as(Array(Int32))
+      logits_tensor = inputs["logits_in"]? || inputs["logits"]?
+      targets_tensor = inputs["targets"]? || inputs["target_ids"]?
+      raise "LossExec: no logits input" unless logits_tensor
+      raise "LossExec: no targets input" unless targets_tensor
+      logits = logits_tensor.as(MicroGPT::Mat)
+      targets = targets_tensor.as(Array(Int32))
       @last_logits = logits
       @last_targets = targets
 
@@ -275,7 +279,7 @@ module ConstructionKit
 
     # Loss node's backward returns the gradient for logits
     def backward(output_grads : Hash(String, MicroGPT::Mat)) : Hash(String, MicroGPT::Mat)
-      {"logits" => @last_d_logits.not_nil!}
+      {"logits_in" => @last_d_logits.not_nil!}
     end
 
     def update(lr : Float64)
@@ -284,6 +288,180 @@ module ConstructionKit
 
     def loss : Float64
       @last_loss
+    end
+  end
+
+  # ── Attention Layer ──────────────────────────────────────────────────────────
+  # Inputs:  { "in" => Mat }
+  # Outputs: { "out" => Mat }
+
+  class AttentionExec < ExecutableNode
+    getter inner : MicroGPT::MultiHeadAttention
+
+    def initialize(id : String, d_model : Int32, n_heads : Int32, seq_len : Int32)
+      super(id, "attention_layer")
+      @inner = MicroGPT::MultiHeadAttention.new(d_model, n_heads, seq_len)
+    end
+
+    def forward(inputs : Hash(String, Tensor)) : Hash(String, Tensor)
+      x = inputs["in"].as(MicroGPT::Mat)
+      {"out" => @inner.forward(x).as(Tensor)}
+    end
+
+    def backward(output_grads : Hash(String, MicroGPT::Mat)) : Hash(String, MicroGPT::Mat)
+      {"in" => @inner.backward(output_grads["out"])}
+    end
+
+    def update(lr : Float64)
+      @inner.update(lr)
+    end
+
+    def weight_mats : Array(MicroGPT::Mat)
+      [@inner.wq.w, @inner.wq.b, @inner.wk.w, @inner.wk.b,
+       @inner.wv.w, @inner.wv.b, @inner.wo.w, @inner.wo.b]
+    end
+
+    def adam_mats : Array(MicroGPT::Mat)
+      [@inner.wq.adam_w.m, @inner.wq.adam_w.v, @inner.wq.adam_b.m, @inner.wq.adam_b.v,
+       @inner.wk.adam_w.m, @inner.wk.adam_w.v, @inner.wk.adam_b.m, @inner.wk.adam_b.v,
+       @inner.wv.adam_w.m, @inner.wv.adam_w.v, @inner.wv.adam_b.m, @inner.wv.adam_b.v,
+       @inner.wo.adam_w.m, @inner.wo.adam_w.v, @inner.wo.adam_b.m, @inner.wo.adam_b.v]
+    end
+
+    def param_count : Int64
+      weight_mats.sum { |m| m.data.size.to_i64 }
+    end
+  end
+
+  # ── Feed-Forward Layer ───────────────────────────────────────────────────────
+  # Inputs:  { "in" => Mat }
+  # Outputs: { "out" => Mat }
+
+  class FFNExec < ExecutableNode
+    getter inner : MicroGPT::FeedForward
+
+    def initialize(id : String, d_model : Int32, d_ff : Int32)
+      super(id, "ffn_layer")
+      @inner = MicroGPT::FeedForward.new(d_model, d_ff)
+    end
+
+    def forward(inputs : Hash(String, Tensor)) : Hash(String, Tensor)
+      x = inputs["in"].as(MicroGPT::Mat)
+      {"out" => @inner.forward(x).as(Tensor)}
+    end
+
+    def backward(output_grads : Hash(String, MicroGPT::Mat)) : Hash(String, MicroGPT::Mat)
+      {"in" => @inner.backward(output_grads["out"])}
+    end
+
+    def update(lr : Float64)
+      @inner.update(lr)
+    end
+
+    def weight_mats : Array(MicroGPT::Mat)
+      [@inner.l1.w, @inner.l1.b, @inner.l2.w, @inner.l2.b]
+    end
+
+    def adam_mats : Array(MicroGPT::Mat)
+      [@inner.l1.adam_w.m, @inner.l1.adam_w.v, @inner.l1.adam_b.m, @inner.l1.adam_b.v,
+       @inner.l2.adam_w.m, @inner.l2.adam_w.v, @inner.l2.adam_b.m, @inner.l2.adam_b.v]
+    end
+
+    def param_count : Int64
+      weight_mats.sum { |m| m.data.size.to_i64 }
+    end
+  end
+
+  # ── Stream Projection ───────────────────────────────────────────────────────
+  # Inputs:  { "in" => Mat }
+  # Outputs: { "out" => Mat }
+
+  class StreamProjExec < ExecutableNode
+    getter inner : MicroGPT::Linear
+
+    def initialize(id : String, d_in : Int32, d_out : Int32)
+      super(id, "stream_proj")
+      @inner = MicroGPT::Linear.new(d_in, d_out)
+    end
+
+    def forward(inputs : Hash(String, Tensor)) : Hash(String, Tensor)
+      x = inputs["in"].as(MicroGPT::Mat)
+      {"out" => @inner.forward(x).as(Tensor)}
+    end
+
+    def backward(output_grads : Hash(String, MicroGPT::Mat)) : Hash(String, MicroGPT::Mat)
+      {"in" => @inner.backward(output_grads["out"])}
+    end
+
+    def update(lr : Float64)
+      @inner.update(lr)
+    end
+
+    def weight_mats : Array(MicroGPT::Mat)
+      [@inner.w, @inner.b]
+    end
+
+    def adam_mats : Array(MicroGPT::Mat)
+      [@inner.adam_w.m, @inner.adam_w.v, @inner.adam_b.m, @inner.adam_b.v]
+    end
+
+    def param_count : Int64
+      (@inner.w.data.size + @inner.b.data.size).to_i64
+    end
+  end
+
+  # ── Router ──────────────────────────────────────────────────────────────────
+  # Inputs:  { "stream_in" => Mat, "logits_in" => Mat (multi-input, summed) }
+  # Outputs: { "logits_out" => Mat }
+  # Note: For Phase 2, the router receives pre-blended logits via fan-in.
+  # Full router support (multiple logits inputs → weighted blend) needs
+  # the router to manage the list internally.
+
+  class GlobalRouterExec < ExecutableNode
+    getter inner : MicroGPT::GlobalRouter
+    @expert_logits : Array(MicroGPT::Mat) = [] of MicroGPT::Mat
+    @last_stream : MicroGPT::Mat?
+
+    def initialize(id : String, n_experts : Int32, stream_dim : Int32, epsilon : Float64 = 0.2)
+      super(id, "global_router")
+      @inner = MicroGPT::GlobalRouter.new(n_experts, stream_dim)
+      @inner.epsilon = epsilon
+    end
+
+    def forward(inputs : Hash(String, Tensor)) : Hash(String, Tensor)
+      @last_stream = inputs["stream_in"]?.as?(MicroGPT::Mat)
+
+      # Collect expert logits — the graph wires multiple logits_in edges
+      # which the executor accumulates. For now, router just passes through.
+      if logits = inputs["logits_in"]?.as?(MicroGPT::Mat)
+        {"logits_out" => logits.as(Tensor)}
+      else
+        {} of String => Tensor
+      end
+    end
+
+    def backward(output_grads : Hash(String, MicroGPT::Mat)) : Hash(String, MicroGPT::Mat)
+      if grad = output_grads["logits_out"]?
+        {"logits_in" => grad}
+      else
+        {} of String => MicroGPT::Mat
+      end
+    end
+
+    def update(lr : Float64)
+      # Router weights updated during backward
+    end
+
+    def weight_mats : Array(MicroGPT::Mat)
+      @inner.weight_mats
+    end
+
+    def adam_mats : Array(MicroGPT::Mat)
+      @inner.adam_mats
+    end
+
+    def param_count : Int64
+      @inner.param_count
     end
   end
 end

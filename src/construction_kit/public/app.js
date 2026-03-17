@@ -2343,6 +2343,17 @@ function ensureChildren(node) {
   }
 }
 
+// Recursively ensure all children graphs are populated (for graph-mode build)
+function ensureAllChildren(graph) {
+  if (!graph || !graph.nodes) return;
+  for (const node of graph.nodes) {
+    ensureChildren(node);
+    if (node.children) {
+      ensureAllChildren(node.children);
+    }
+  }
+}
+
 // ── Toolbar (delegated to active card) ───────────────────────────────────────
 
 function doDemo() {
@@ -2772,9 +2783,11 @@ async function doBuild(card) {
 
   try {
     const pipelineGraph = getPipelineGraph(card);
+    const graphMode = card.graphMode || false;
+    // In graph mode, ensure all children are populated before serializing
+    if (graphMode) ensureAllChildren(pipelineGraph);
     const clientHash = await computeModelHash(pipelineGraph);
     const dataFile = document.getElementById('train-data-file')?.value?.trim() || 'data/input.txt';
-    const graphMode = card.graphMode || false;
     const payload = { version: 2, graph: serializeGraph(pipelineGraph), card_id: card.id, hash: clientHash, data_file: dataFile, graph_mode: graphMode };
     const data = await apiPost('/api/build', payload);
 

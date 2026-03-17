@@ -636,6 +636,7 @@ module ConstructionKit
 
       spawn do
         b = slot.builder.not_nil!
+        begin
         steps.times do |step|
           break unless slot.training
 
@@ -710,6 +711,16 @@ module ConstructionKit
         log_file.puts(footer.to_json)
         log_file.close
         slot.train_log = nil
+
+        rescue ex
+          STDERR.puts "Training error: #{ex.message}"
+          STDERR.puts ex.backtrace.first(10).join("\n")
+          slot.training = false
+          log_file.puts({type: "error", message: ex.message}.to_json) rescue nil
+          log_file.close rescue nil
+          slot.train_log = nil
+          next
+        end
 
         slot.training = false
 
