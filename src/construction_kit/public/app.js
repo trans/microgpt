@@ -1816,8 +1816,17 @@ function bindParamHandlers(container, targetNode) {
       } else {
         targetNode.params[param] = parseInt(el.value);
       }
-      // Mark children as stale — they'll be regenerated on next build
-      targetNode._paramsDirty = true;
+      // Regenerate children with updated params (atomic: nodes + edges together)
+      const defaults = getDefaultChildren(targetNode.type, targetNode.params);
+      if (defaults) {
+        targetNode.children = defaults;
+        for (const cn of targetNode.children.nodes) {
+          if (cn.id >= state.nextId) state.nextId = cn.id + 1;
+        }
+        for (const ce of targetNode.children.edges) {
+          if (ce.id >= state.nextId) state.nextId = ce.id + 1;
+        }
+      }
     });
   });
 }
@@ -2381,14 +2390,19 @@ function ensureChildren(node) {
 }
 
 // Recursively ensure all children graphs are populated (for graph-mode build)
+function clearAllChildren(graph) {
+  if (!graph || !graph.nodes) return;
+  for (const node of graph.nodes) {
+    if (node.children) {
+      clearAllChildren(node.children);
+      node.children = null;
+    }
+  }
+}
+
 function ensureAllChildren(graph) {
   if (!graph || !graph.nodes) return;
   for (const node of graph.nodes) {
-    // If params were changed, regenerate children from new params
-    if (node._paramsDirty && node.children) {
-      node.children = null;
-      delete node._paramsDirty;
-    }
     ensureChildren(node);
     if (node.children) {
       ensureAllChildren(node.children);
