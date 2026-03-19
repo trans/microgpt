@@ -165,9 +165,34 @@ function createEmptyCard(name) {
       training: false,
       lossHistory: [],
       modelHash: null,
+      totalSteps: 0,
     },
     graphMode: false,
   };
+}
+
+// Check if a node type is a container in ANY scope (not just the current one)
+function getChildScope(nodeType) {
+  // Check current scope first
+  const current = SCOPE_LEVELS[state.currentScope]?.containers[nodeType];
+  if (current) return current;
+  // Fall back to any scope
+  for (const key of Object.keys(SCOPE_LEVELS)) {
+    const s = SCOPE_LEVELS[key].containers[nodeType];
+    if (s) return s;
+  }
+  return null;
+}
+
+function findNodeRecursive(graph, nodeId) {
+  for (const n of graph.nodes) {
+    if (n.id === nodeId) return n;
+    if (n.children) {
+      const found = findNodeRecursive(n.children, nodeId);
+      if (found) return found;
+    }
+  }
+  return null;
 }
 
 function getActiveCard() { return cards[activeCardIdx]; }
@@ -216,13 +241,16 @@ async function init() {
   const resp = await fetch('components.json');
   state.registry = await resp.json();
 
-  // Create initial card
-  const card = createEmptyCard('Demo');
-  cards.push(card);
-  activeCardIdx = 0;
-  state.nodes = projectGraph.nodes;
-  state.edges = projectGraph.edges;
-  state.currentScope = 'project';
+  // Try to restore from localStorage, otherwise create demo
+  if (!restoreProject()) {
+    const card = createEmptyCard('Demo');
+    cards.push(card);
+    activeCardIdx = 0;
+    state.nodes = projectGraph.nodes;
+    state.edges = projectGraph.edges;
+    state.currentScope = 'project';
+    loadDemo();
+  }
 
   buildPalette();
   setupD3Zoom();
@@ -230,11 +258,11 @@ async function init() {
   setupCards();
   setupLeftPanel();
   setupChat();
-  loadDemo();
   renderBreadcrumbs();
   updateStatus();
   renderTree();
   renderCardList();
+  _autoSaveEnabled = true;
 }
 
 // ── Palette (scope-aware) ────────────────────────────────────────────────────
@@ -290,7 +318,7 @@ function renderTreeLevel(parentEl, nodes, scopeType, depth, scopePath) {
     const comp = getCompDef(node.type);
     if (!comp) continue;
 
-    const childScope = level?.containers[node.type];
+    const childScope = getChildScope(node.type);
     const isContainer = !!childScope;
     const isExpanded = treeExpanded.has(node.id);
     const isInPath = state.scopeStack.some(s => s.nodeId === node.id);
@@ -761,8 +789,14 @@ function zoomIntoNode(nodeId) {
   const node = state.nodes.find(n => n.id === nodeId);
   if (!node) return;
 
-  const level = SCOPE_LEVELS[state.currentScope];
-  const childScope = level?.containers[node.type];
+  // Check current scope first, then fall back to any scope that has this type as a container
+  let childScope = SCOPE_LEVELS[state.currentScope]?.containers[node.type];
+  if (!childScope) {
+    for (const scopeKey of Object.keys(SCOPE_LEVELS)) {
+      const s = SCOPE_LEVELS[scopeKey];
+      if (s.containers[node.type]) { childScope = s.containers[node.type]; break; }
+    }
+  }
   if (!childScope) return;
 
   // Initialize children graph if needed
@@ -1283,6 +1317,7 @@ function renderAll() {
 
   renderProps();
   renderTree();
+  debouncedAutoSave();
 }
 
 // ── Port placement optimization ──────────────────────────────────────────────
@@ -1435,7 +1470,7 @@ function renderNode(node) {
 
   // Is this a container? Add visual hint
   const level = SCOPE_LEVELS[state.currentScope];
-  const isContainer = !!(level?.containers[node.type]);
+  const isContainer = !!(getChildScope(node.type));
 
   // Body
   const rect = document.createElementNS(SVG_NS, 'rect');
@@ -1781,6 +1816,8 @@ function bindParamHandlers(container, targetNode) {
       } else {
         targetNode.params[param] = parseInt(el.value);
       }
+      // Mark children as stale — they'll be regenerated on next build
+      targetNode._paramsDirty = true;
     });
   });
 }
@@ -1804,7 +1841,7 @@ function renderProps() {
   if (!comp) { container.innerHTML = ''; return; }
 
   const level = SCOPE_LEVELS[state.currentScope];
-  const isContainer = !!(level?.containers[node.type]);
+  const isContainer = !!(getChildScope(node.type));
 
   // Add selected node to breadcrumbs
   crumbs.querySelector('.crumb-selected')?.remove();
@@ -2222,7 +2259,7 @@ function onNodeMouseDown(e, nodeId) {
     const node = state.nodes.find(n => n.id === nodeId);
     if (node) {
       const level = SCOPE_LEVELS[state.currentScope];
-      if (level?.containers[node.type]) {
+      if (getChildScope(node.type)) {
         zoomIntoNode(nodeId);
         return;
       }
@@ -2347,6 +2384,11 @@ function ensureChildren(node) {
 function ensureAllChildren(graph) {
   if (!graph || !graph.nodes) return;
   for (const node of graph.nodes) {
+    // If params were changed, regenerate children from new params
+    if (node._paramsDirty && node.children) {
+      node.children = null;
+      delete node._paramsDirty;
+    }
     ensureChildren(node);
     if (node.children) {
       ensureAllChildren(node.children);
@@ -2886,8 +2928,11 @@ function watchTraining(card) {
     if (resolved) return;
     resolved = true;
     eng.training = false;
+    // Accumulate total steps
+    const lastStep = eng.lossHistory.length > 0 ? eng.lossHistory[eng.lossHistory.length - 1].step : 0;
+    eng.totalSteps = (eng.totalSteps || 0) + lastStep;
     if (avgLoss != null) {
-      setStatus(`${card.name || 'untitled'}: done. Loss: ${avgLoss.toFixed(4)}`);
+      setStatus(`${card.name || 'untitled'}: done. Loss: ${avgLoss.toFixed(4)} (${eng.totalSteps} total steps)`);
     }
     renderCardList();
     // Always auto-save — weights are keyed by model hash
@@ -3295,6 +3340,89 @@ async function doLoadProject(name) {
   }
 }
 
+// ── Auto-save/restore project to localStorage ────────────────────────────────
+
+let _autoSaveTimer = null;
+let _autoSaveEnabled = false;
+function debouncedAutoSave() {
+  if (!_autoSaveEnabled) return;
+  if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(autoSaveProject, 2000);
+}
+
+function autoSaveProject() {
+  if (!_autoSaveEnabled) return;
+  try {
+    const data = {
+      cards: cards.map(c => ({
+        name: c.name,
+        starred: c.starred,
+        graphMode: c.graphMode || false,
+        modelHash: c.engine.modelHash,
+        summary: c.engine.summary,
+        totalSteps: c.engine.totalSteps || 0,
+        nodeId: c.nodeId,
+      })),
+      activeCardIdx,
+      projectGraph: serializeGraph(projectGraph),
+      projectNextId,
+    };
+    localStorage.setItem('projectState', JSON.stringify(data));
+  } catch (e) {
+    console.warn('Auto-save failed:', e);
+  }
+}
+
+function restoreProject() {
+  try {
+    const raw = localStorage.getItem('projectState');
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data.cards || !data.projectGraph) return false;
+
+    // Restore project graph
+    projectGraph.nodes.length = 0;
+    projectGraph.edges.length = 0;
+    const restored = deserializeGraph(data.projectGraph);
+    restored.nodes.forEach(n => projectGraph.nodes.push(n));
+    restored.edges.forEach(e => projectGraph.edges.push(e));
+    projectNextId = data.projectNextId || state.nextId;
+
+    // Restore cards
+    cards.length = 0;
+    data.cards.forEach(c => {
+      cards.push({
+        id: crypto.randomUUID(),
+        name: c.name || '',
+        starred: c.starred || false,
+        graphMode: c.graphMode || false,
+        nodeId: c.nodeId,
+        engine: {
+          built: false,
+          training: false,
+          lossHistory: [],
+          modelHash: c.modelHash || null,
+          summary: c.summary || null,
+          totalSteps: c.totalSteps || 0,
+        },
+      });
+    });
+
+    if (cards.length === 0) return false;
+    activeCardIdx = Math.min(data.activeCardIdx || 0, cards.length - 1);
+
+    // Navigate into the active card
+    state.nodes = projectGraph.nodes;
+    state.edges = projectGraph.edges;
+    state.currentScope = 'project';
+    loadCardIntoCanvas(activeCardIdx);
+    return true;
+  } catch (e) {
+    console.warn('Restore failed:', e);
+    return false;
+  }
+}
+
 function addCard() {
   if (cards.length >= MAX_CARDS) return;
   const card = createEmptyCard('Engine ' + (cards.length + 1));
@@ -3440,6 +3568,7 @@ function renderCardList() {
   });
 
   drawAllSparklines();
+  autoSaveProject();
 }
 
 function renderCollapsedCard(card) {
@@ -3480,6 +3609,7 @@ function renderExpandedCard(card) {
         <div class="mi-row"><img class="mi-icon" src="svg/router.svg" title="Router"><span class="mi-value">${s.router}</span></div>
         <div class="mi-row"><img class="mi-icon" src="svg/vocab.svg" title="Vocab"><span class="mi-value">${s.vocab_size}</span></div>
         ${eng.modelHash ? `<div class="mi-row"><img class="mi-icon" src="svg/hash.svg" title="Hash"><span class="mi-value" title="${eng.modelHash}">${eng.modelHash.slice(0, 8)}</span></div>` : ''}
+        ${eng.totalSteps ? `<div class="mi-row"><span class="mi-value" style="font-size:10px;color:var(--text-dim)">${eng.totalSteps} steps trained</span></div>` : ''}
       </div>
     `;
   }
@@ -3704,19 +3834,29 @@ function appendChatMessage(role, text, save = true) {
   return div;
 }
 
-function applyGraphUpdate(graphData) {
-  const card = getActiveCard();
+function applyGraphUpdate(graphData, targetCardId) {
+  // Find the target card — use card_id if provided, otherwise active card
+  let card = null;
+  let cardIdx = activeCardIdx;
+  if (targetCardId) {
+    const idx = cards.findIndex(c => c.id === targetCardId);
+    if (idx >= 0) { card = cards[idx]; cardIdx = idx; }
+  }
+  if (!card) { card = getActiveCard(); cardIdx = activeCardIdx; }
   if (!card) return;
+
   const engineNode = projectGraph.nodes.find(n => n.id === card.nodeId);
   if (!engineNode) return;
 
   try {
     engineNode.children = deserializeGraph(graphData);
     card.engine.built = false; // needs rebuild after graph change
-    // Reload the canvas with the updated graph
-    loadCardIntoCanvas(activeCardIdx);
+    // Reload the canvas if this is the active card
+    if (cardIdx === activeCardIdx) {
+      loadCardIntoCanvas(activeCardIdx);
+    }
     renderCardList();
-    setStatus('Graph updated by AI');
+    setStatus(`Graph updated by AI: ${card.name || 'untitled'}`);
   } catch (e) {
     console.error('Failed to apply graph update:', e);
     setStatus('Failed to apply AI graph update', { flash: true });
@@ -3756,7 +3896,8 @@ async function sendChatMessage() {
   let viewscreen = null;
   if (card) {
     const engineNode = projectGraph.nodes.find(n => n.id === card.nodeId);
-    viewscreen = {
+    // Active card details
+    const activeCard = {
       card_name: card.name,
       starred: card.starred,
       built: card.engine.built,
@@ -3767,6 +3908,17 @@ async function sendChatMessage() {
       graph_warnings: card.engine.graphWarnings || [],
       last_error: card.engine.lastError || null,
     };
+    // Summary of all cards
+    const allCards = cards.map(c => ({
+      card_name: c.name,
+      active: c === card,
+      starred: c.starred,
+      built: c.engine.built,
+      graph_mode: c.graphMode || false,
+      model_hash: c.engine.modelHash,
+      summary: c.engine.summary || null,
+    }));
+    viewscreen = { active_card: activeCard, all_cards: allCards };
   }
   try {
     const controller = new AbortController();
@@ -3795,7 +3947,7 @@ async function sendChatMessage() {
       appendChatMessage('assistant', data.reply || '(no response)');
       // Apply graph update if the AI modified the model
       if (data.graph_update) {
-        applyGraphUpdate(data.graph_update);
+        applyGraphUpdate(data.graph_update, data.graph_update_card_id);
       }
       // Check if AI started training — sync frontend state
       await syncTrainingState();

@@ -19,9 +19,11 @@
       <div id="left-tab-chat" class="left-tab-pane">
         <div id="chat-messages"></div>
         <div id="chat-input-wrap">
-          <input type="text" id="chat-input" placeholder="Ask about your model..." autocomplete="off">
-          <button id="btn-chat-send" class="toolbar-btn">Send</button>
-          <button id="btn-chat-clear" class="toolbar-btn" title="Clear chat" style="padding:4px 6px;font-size:11px">&times;</button>
+          <textarea id="chat-input" placeholder="Ask about your model..." rows="2" autocomplete="off"></textarea>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <button id="btn-chat-send" class="toolbar-btn" style="padding:4px 6px">Send</button>
+            <button id="btn-chat-clear" class="toolbar-btn" title="Clear chat" style="padding:4px 6px;font-size:11px">&times;</button>
+          </div>
         </div>
       </div>
     </div>

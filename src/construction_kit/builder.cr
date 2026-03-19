@@ -238,9 +238,19 @@ module ConstructionKit
           expert_infos << ExpertInfo.new(index: 0, type: "unknown", spec: "graph-driven", params: eg.total_params)
         end
 
+        # Derive d_model from the largest attention node's param count
+        attn_nodes = eg.nodes.values.select { |n| n.type == "attention_layer" }
+        d_model = if attn_nodes.size > 0
+          # Each attention has 4 matrices of [d_model, d_model] = 4*d^2 params + 4*d biases
+          # Solve: 4*d^2 + 4*d ≈ param_count → d ≈ sqrt(param_count/4)
+          Math.sqrt(attn_nodes.first.param_count / 4).round.to_i32
+        else
+          @config.stream_dim
+        end
+
         ModelSummary.new(
           total_params: eg.total_params,
-          stream_dim: @config.stream_dim,
+          stream_dim: d_model,
           seq_len: @config.seq_len,
           n_experts: n_experts,
           router: router_desc,

@@ -38,6 +38,7 @@ module ConstructionKit
     @chat_tools : Array(Arcana::Chat::Tool) = [] of Arcana::Chat::Tool
     @chat_sessions : Hash(String, Arcana::Chat::History) = {} of String => Arcana::Chat::History
     @chat_pending_graph_update : JSON::Any? = nil
+    @chat_pending_graph_card_id : String? = nil
 
     def initialize(@host : String = "127.0.0.1", @port : Int32 = 8080, @data_dir : String = DEFAULT_DATA_DIR)
       @saves_dir = File.join(@data_dir, "saves")
@@ -183,16 +184,29 @@ module ConstructionKit
           return unless card_id
 
           doc = GraphDocument.from_json(body)
-          errors = ConstructionKit.validate(doc.graph)
-          unless errors.empty?
-            ctx.response.status = HTTP::Status.new(400)
-            ctx.response.print({error: "Validation failed", details: errors.map(&.to_s)}.to_json)
-            return
-          end
-
           data_file = params["data_file"]?.try(&.as_s?) || "data/input.txt"
           graph_mode = params["graph_mode"]?.try(&.as_bool?) || false
-          config = ConstructionKit.extract_config(doc.graph, data_file)
+
+          # Skip legacy validation in graph mode — the compiler handles any topology
+          unless graph_mode
+            errors = ConstructionKit.validate(doc.graph)
+            unless errors.empty?
+              ctx.response.status = HTTP::Status.new(400)
+              ctx.response.print({error: "Validation failed", details: errors.map(&.to_s)}.to_json)
+              return
+            end
+          end
+          config = begin
+            ConstructionKit.extract_config(doc.graph, data_file)
+          rescue
+            # Fallback config for graph mode without cooperative
+            ConstructionKit::ModelConfig.new(
+              data_file, 128, 64,
+              [] of ConstructionKit::ExpertSpec,
+              "none", 0.0,
+              false, 0.0003
+            )
+          end
           client_hash = params["hash"]?.try(&.as_s?)
           server_hash = compute_graph_hash(doc.graph)
           # Use server hash when available, fall back to client hash
@@ -416,13 +430,18 @@ module ConstructionKit
         reply_html = Arcana::Markdown.to_html(reply)
         # Check if any update_graph tool calls were made — include the graph update
         graph_update = @chat_pending_graph_update
+        graph_update_card_id = @chat_pending_graph_card_id
         @chat_pending_graph_update = nil
+        @chat_pending_graph_card_id = nil
         tools_used = @chat_tools_used
         response = JSON.build do |json|
           json.object do
             json.field "reply", reply_html
             json.field "session_id", session_id
-            json.field "graph_update", graph_update if graph_update
+            if graph_update
+              json.field "graph_update", graph_update
+              json.field "graph_update_card_id", graph_update_card_id
+            end
             json.field "tools_used" do
               json.array { tools_used.each { |t| json.string t } }
             end
@@ -872,14 +891,21 @@ module ConstructionKit
 
       The user builds models by arranging components in a graph: tokenizers, windowers, transformer experts, routers, and other blocks. Components connect via typed ports. The system uses a cooperative ensemble architecture where multiple experts produce logits that are blended by a router.
 
+      Your viewscreen shows you the full project state:
+      - `all_cards`: summary of every engine card (name, built status, params, hash)
+      - `active_card`: the card the user is currently viewing, including its full graph
+
       You can help users by:
       - Explaining how components work and how to connect them
-      - Inspecting their current graph and suggesting improvements
-      - Modifying their graph to add/remove/reconfigure components
+      - Inspecting and comparing models across cards
+      - Modifying graphs to add/remove/reconfigure components
       - Building, training, and testing models
       - Interpreting training results and loss curves
+      - Comparing performance across different architectures
 
       When modifying graphs, use the update_graph tool with a complete graph structure. Always inspect the current graph first with get_graph before making changes.
+
+      When the user mentions a specific model by name, check all_cards to find the right card_id.
 
       Keep responses concise and practical. The user can see the visual graph updating in real time.
       PROMPT
@@ -974,6 +1000,7 @@ module ConstructionKit
         graph_json = args["graph"]?
         if graph_json
           @chat_pending_graph_update = graph_json
+          @chat_pending_graph_card_id = card_id
           {updated: true, card_id: card_id, note: "Graph update queued. The frontend will apply it."}.to_json
         else
           {error: "No graph provided"}.to_json
