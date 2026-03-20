@@ -16,7 +16,7 @@
         ]
       },
       "params": {
-        "d_model": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]},
+        "d": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]},
         "n_layers": {"type": "int", "default": 3, "min": 1, "max": 24}
       }
     },
@@ -35,7 +35,7 @@
         ]
       },
       "params": {
-        "d_model": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+        "d": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
       }
     },
     {
@@ -298,11 +298,11 @@
           {"id": "in", "label": "tokens", "dataType": "token_ids", "shape": [null]}
         ],
         "out": [
-          {"id": "out", "label": "embed", "dataType": "matrix", "shape": [null, "d_model"]}
+          {"id": "out", "label": "embed", "dataType": "matrix", "shape": [null, "d"]}
         ]
       },
       "params": {
-        "d_model": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+        "d": {"type": "int", "inherit": true}
       }
     },
     {
@@ -312,14 +312,14 @@
       "color": "#5c9fd9",
       "ports": {
         "in": [
-          {"id": "in", "label": "in", "dataType": "matrix", "shape": [null, "d_model"]}
+          {"id": "in", "label": "in", "dataType": "matrix", "shape": [null, "d"]}
         ],
         "out": [
-          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "d_model"]}
+          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "d"]}
         ]
       },
       "params": {
-        "d_model": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]},
+        "d": {"type": "int", "inherit": true},
         "n_heads": {"type": "int", "default": 4, "options": [1, 2, 4, 8, 16]}
       }
     },
@@ -330,15 +330,15 @@
       "color": "#d9825c",
       "ports": {
         "in": [
-          {"id": "in", "label": "in", "dataType": "matrix", "shape": [null, "d_model"]}
+          {"id": "in", "label": "in", "dataType": "matrix", "shape": [null, "d"]}
         ],
         "out": [
-          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "d_model"]}
+          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "d"]}
         ]
       },
       "params": {
-        "d_model": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]},
-        "d_ff": {"type": "int", "default": 256, "options": [128, 256, 512, 1024, 2048]}
+        "d": {"type": "int", "inherit": true},
+        "ff_mult": {"type": "int", "default": 4, "options": [1, 2, 4, 8], "_TODO": "Replace with expression param (e.g. d_ff = 4*d) for non-standard expansion ratios"}
       }
     },
     {
@@ -348,14 +348,14 @@
       "color": "#8899aa",
       "ports": {
         "in": [
-          {"id": "in", "label": "in", "dataType": "matrix", "shape": [null, "dim"]}
+          {"id": "in", "label": "in", "dataType": "matrix", "shape": [null, "d"]}
         ],
         "out": [
-          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "dim"]}
+          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "d"]}
         ]
       },
       "params": {
-        "dim": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+        "d": {"type": "int", "inherit": true}
       }
     },
     {
@@ -365,14 +365,14 @@
       "color": "#e6994a",
       "ports": {
         "in": [
-          {"id": "in", "label": "hidden", "dataType": "matrix", "shape": [null, "d_model"]}
+          {"id": "in", "label": "hidden", "dataType": "matrix", "shape": [null, "d"]}
         ],
         "out": [
           {"id": "out", "label": "logits", "dataType": "logits", "shape": [null, "vocab_size"]}
         ]
       },
       "params": {
-        "d_model": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+        "d": {"type": "int", "inherit": true}
       }
     },
     {
@@ -408,8 +408,8 @@
         ]
       },
       "params": {
-        "d_in": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]},
-        "d_out": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+        "d_in": {"type": "int", "inherit": true},
+        "d_out": {"type": "int", "inherit": true}
       }
     },
     {
@@ -419,15 +419,15 @@
       "color": "#d9c04a",
       "ports": {
         "in": [
-          {"id": "x", "label": "x", "dataType": "matrix", "shape": [null, "dim"]},
-          {"id": "b", "label": "b", "dataType": "vector", "shape": ["dim"]}
+          {"id": "x", "label": "x", "dataType": "matrix", "shape": [null, "d"]},
+          {"id": "b", "label": "b", "dataType": "vector", "shape": ["d"]}
         ],
         "out": [
-          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "dim"]}
+          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "d"]}
         ]
       },
       "params": {
-        "dim": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+        "d": {"type": "int", "inherit": true}
       }
     },
     {
@@ -442,8 +442,8 @@
         ]
       },
       "params": {
-        "rows": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]},
-        "cols": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+        "rows": {"type": "int", "inherit": true},
+        "cols": {"type": "int", "inherit": true}
       }
     },
     {
@@ -454,11 +454,11 @@
       "ports": {
         "in": [],
         "out": [
-          {"id": "out", "label": "b", "dataType": "vector", "shape": ["dim"]}
+          {"id": "out", "label": "b", "dataType": "vector", "shape": ["d"]}
         ]
       },
       "params": {
-        "dim": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+        "d": {"type": "int", "inherit": true}
       }
     },
     {
@@ -468,14 +468,14 @@
       "color": "#d9a04a",
       "ports": {
         "in": [
-          {"id": "in", "label": "x", "dataType": "matrix", "shape": [null, "dim"]}
+          {"id": "in", "label": "x", "dataType": "matrix", "shape": [null, "d"]}
         ],
         "out": [
           {"id": "out", "label": "μ", "dataType": "vector", "shape": [null]}
         ]
       },
       "params": {
-        "dim": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+        "d": {"type": "int", "inherit": true}
       }
     },
     {
@@ -485,15 +485,15 @@
       "color": "#d9a04a",
       "ports": {
         "in": [
-          {"id": "a", "label": "a", "dataType": "matrix", "shape": [null, "dim"]},
+          {"id": "a", "label": "a", "dataType": "matrix", "shape": [null, "d"]},
           {"id": "b", "label": "b", "dataType": "vector", "shape": [null]}
         ],
         "out": [
-          {"id": "out", "label": "a−b", "dataType": "matrix", "shape": [null, "dim"]}
+          {"id": "out", "label": "a−b", "dataType": "matrix", "shape": [null, "d"]}
         ]
       },
       "params": {
-        "dim": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+        "d": {"type": "int", "inherit": true}
       }
     },
     {
@@ -503,14 +503,14 @@
       "color": "#d9a04a",
       "ports": {
         "in": [
-          {"id": "in", "label": "x", "dataType": "matrix", "shape": [null, "dim"]}
+          {"id": "in", "label": "x", "dataType": "matrix", "shape": [null, "d"]}
         ],
         "out": [
           {"id": "out", "label": "σ²", "dataType": "vector", "shape": [null]}
         ]
       },
       "params": {
-        "dim": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+        "d": {"type": "int", "inherit": true}
       }
     },
     {
@@ -520,15 +520,15 @@
       "color": "#d9a04a",
       "ports": {
         "in": [
-          {"id": "x", "label": "x", "dataType": "matrix", "shape": [null, "dim"]},
+          {"id": "x", "label": "x", "dataType": "matrix", "shape": [null, "d"]},
           {"id": "var", "label": "σ²", "dataType": "vector", "shape": [null]}
         ],
         "out": [
-          {"id": "out", "label": "x̂", "dataType": "matrix", "shape": [null, "dim"]}
+          {"id": "out", "label": "x̂", "dataType": "matrix", "shape": [null, "d"]}
         ]
       },
       "params": {
-        "dim": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]},
+        "d": {"type": "int", "inherit": true},
         "eps": {"type": "float", "default": 0.00001, "min": 0.0000001, "max": 0.001, "step": 0.00001}
       }
     },
@@ -540,11 +540,11 @@
       "ports": {
         "in": [],
         "out": [
-          {"id": "out", "label": "γ", "dataType": "vector", "shape": ["dim"]}
+          {"id": "out", "label": "γ", "dataType": "vector", "shape": ["d"]}
         ]
       },
       "params": {
-        "dim": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+        "d": {"type": "int", "inherit": true}
       }
     },
     {
@@ -554,15 +554,15 @@
       "color": "#d9a04a",
       "ports": {
         "in": [
-          {"id": "x", "label": "x", "dataType": "matrix", "shape": [null, "dim"]},
-          {"id": "scale", "label": "scale", "dataType": "vector", "shape": ["dim"]}
+          {"id": "x", "label": "x", "dataType": "matrix", "shape": [null, "d"]},
+          {"id": "scale", "label": "scale", "dataType": "vector", "shape": ["d"]}
         ],
         "out": [
-          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "dim"]}
+          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "d"]}
         ]
       },
       "params": {
-        "dim": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+        "d": {"type": "int", "inherit": true}
       }
     },
     {
@@ -572,14 +572,14 @@
       "color": "#d9a04a",
       "ports": {
         "in": [
-          {"id": "in", "label": "in", "dataType": "matrix", "shape": [null, "dim"]}
+          {"id": "in", "label": "in", "dataType": "matrix", "shape": [null, "d"]}
         ],
         "out": [
-          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "dim"]}
+          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "d"]}
         ]
       },
       "params": {
-        "dim": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+        "d": {"type": "int", "inherit": true}
       }
     },
     {
@@ -607,14 +607,14 @@
       "color": "#d9a04a",
       "ports": {
         "in": [
-          {"id": "in", "label": "in", "dataType": "matrix", "shape": [null, "dim"]}
+          {"id": "in", "label": "in", "dataType": "matrix", "shape": [null, "d"]}
         ],
         "out": [
-          {"id": "out", "label": "out", "dataType": "vector", "shape": ["dim"]}
+          {"id": "out", "label": "out", "dataType": "vector", "shape": ["d"]}
         ]
       },
       "params": {
-        "dim": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+        "d": {"type": "int", "inherit": true}
       }
     },
     {
@@ -624,14 +624,14 @@
       "color": "#d9a04a",
       "ports": {
         "in": [
-          {"id": "in", "label": "in", "dataType": "vector", "shape": ["dim"]}
+          {"id": "in", "label": "in", "dataType": "vector", "shape": ["d"]}
         ],
         "out": [
-          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "dim"]}
+          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "d"]}
         ]
       },
       "params": {
-        "dim": {"type": "int", "default": 2}
+        "d": {"type": "int", "inherit": true}
       }
     },
     {
@@ -641,14 +641,14 @@
       "color": "#d9a04a",
       "ports": {
         "in": [
-          {"id": "in", "label": "in", "dataType": "matrix", "shape": [null, "dim"]}
+          {"id": "in", "label": "in", "dataType": "matrix", "shape": [null, "d"]}
         ],
         "out": [
-          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "dim"]}
+          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "d"]}
         ]
       },
       "params": {
-        "dim": {"type": "int", "default": 256, "options": [128, 256, 512, 1024, 2048]}
+        "d": {"type": "int", "inherit": true}
       }
     },
     {
@@ -659,12 +659,12 @@
       "ports": {
         "in": [],
         "out": [
-          {"id": "out", "label": "E", "dataType": "matrix", "shape": ["vocab_size", "d_model"]}
+          {"id": "out", "label": "E", "dataType": "matrix", "shape": ["vocab_size", "d"]}
         ]
       },
       "params": {
         "vocab_size": {"type": "int", "default": 65},
-        "d_model": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+        "d": {"type": "int", "inherit": true}
       }
     },
     {
@@ -675,14 +675,14 @@
       "ports": {
         "in": [
           {"id": "ids", "label": "ids", "dataType": "token_ids", "shape": [null]},
-          {"id": "table", "label": "table", "dataType": "matrix", "shape": ["vocab_size", "d_model"]}
+          {"id": "table", "label": "table", "dataType": "matrix", "shape": ["vocab_size", "d"]}
         ],
         "out": [
-          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "d_model"]}
+          {"id": "out", "label": "out", "dataType": "matrix", "shape": [null, "d"]}
         ]
       },
       "params": {
-        "d_model": {"type": "int", "default": 64, "options": [32, 64, 128, 256, 512]}
+        "d": {"type": "int", "inherit": true}
       }
     },
     {

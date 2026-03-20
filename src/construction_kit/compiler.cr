@@ -19,9 +19,10 @@ module ConstructionKit
     # Compile a pipeline-level graph into an executable graph.
     def compile(graph : GraphData) : ExecutableGraph
       eg = ExecutableGraph.new
+      ctx = ParamContext.new
 
       # Recursively compile all nodes, flattening containers
-      compile_scope(graph, nil, graph, eg, "")
+      compile_scope(graph, nil, graph, eg, "", ctx)
 
       eg.compute_topo_order!
       STDERR.puts "Compiled: #{eg.nodes.size} nodes, #{eg.edges.size} edges"
@@ -34,20 +35,38 @@ module ConstructionKit
       parent_node : Node?,
       parent_graph : GraphData,
       eg : ExecutableGraph,
-      prefix : String
+      prefix : String,
+      parent_ctx : ParamContext
     )
       # First pass: compile each node
       graph.nodes.each do |node|
         node_id = make_id(prefix, node.id)
 
+        # Build param context for this node: inherit from parent + add local params
+        ctx = ParamContext.new(parent_ctx)
+        # Propagate local params into context (d, stream_dim, etc.)
+        node.params.each do |key, val|
+          if v = val.as_i?
+            ctx.set(key, v.to_i32)
+          elsif v = val.as_f?
+            ctx.set(key, v)
+          end
+        end
+        # Derive d_ff from d * ff_mult if ff_mult is set
+        if node.type == "ffn_layer"
+          d = ctx.get_i("d", 64)
+          ff_mult = node.param_i("ff_mult", 4)
+          ctx.set("d_ff", d * ff_mult)
+        end
+
         if node.children && has_compilable_children?(node)
-          # Container with compilable children — recurse
-          compile_scope(node.children.not_nil!, node, graph, eg, node_id)
+          # Container with compilable children — recurse with context
+          compile_scope(node.children.not_nil!, node, graph, eg, node_id, ctx)
         elsif SKIP_TYPES.includes?(node.type)
           # Data pipeline node — skip
         else
           # Leaf node or compound fallback — create an ExecutableNode
-          exec_node = create_math_node(node_id, node)
+          exec_node = create_math_node(node_id, node, ctx)
           eg.add_node(exec_node) if exec_node
         end
       end
@@ -127,26 +146,28 @@ module ConstructionKit
     end
 
     # Create a math-level ExecutableNode
-    private def create_math_node(id : String, node : Node) : ExecutableNode?
+    # Create a math-level ExecutableNode using inherited params from context.
+    private def create_math_node(id : String, node : Node, ctx : ParamContext) : ExecutableNode?
+      # Resolve d from context (inherited from parent transformer/cooperative)
+      d = ctx.get_i("d", 64)
+      d_ff = ctx.get_i("d_ff", d * 4)
+
       case node.type
-      # Parameter nodes
+      # Parameter nodes — use inherited d for dimensions
       when "weight_param"
-        rows = node.param_i("rows", 64)
-        cols = node.param_i("cols", 64)
+        rows = node.param_i("rows", d)
+        cols = node.param_i("cols", d)
         WeightParamExec.new(id, rows, cols)
 
       when "bias_param"
-        dim = node.param_i("dim", 64)
-        BiasParamExec.new(id, dim)
+        BiasParamExec.new(id, d)
 
       when "scale_param"
-        dim = node.param_i("dim", 64)
-        ScaleParamExec.new(id, dim)
+        ScaleParamExec.new(id, d)
 
       when "embedding_table"
         vocab_size = node.param_i("vocab_size", @vocab_size)
-        d_model = node.param_i("d_model", 64)
-        EmbeddingTableExec.new(id, vocab_size, d_model)
+        EmbeddingTableExec.new(id, vocab_size, d)
 
       # Compute nodes
       when "matmul"
@@ -176,17 +197,15 @@ module ConstructionKit
       when "broadcast"
         BroadcastExec.new(id)
 
-      # Compound nodes (use Crystal classes for performance)
+      # Compound nodes — use inherited d from context
       when "attention_layer"
-        d_model = node.param_i("d_model", 64)
-        n_heads = node.param_i("n_heads", 4)
-        AttentionCompoundExec.new(id, d_model, n_heads, @seq_len)
+        n_heads = node.param_i("n_heads", Math.max(1, d // 16))
+        AttentionCompoundExec.new(id, d, n_heads, @seq_len)
 
       when "layer_norm"
         # Use fused backend (compound) — the math decomposition children
         # (reduce_mean, subtract, etc.) aren't implemented yet.
-        dim = node.param_i("dim", 64)
-        LayerNormFusedExec.new(id, dim)
+        LayerNormFusedExec.new(id, d)
 
       when "loss"
         MathLossExec.new(id)

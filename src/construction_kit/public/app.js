@@ -6,6 +6,47 @@
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const starSvg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
 
+// ── Param Inheritance ────────────────────────────────────────────────────────
+
+// Resolve an inherited param by walking up the scope stack.
+// Returns the value from the nearest ancestor that owns it, or the default.
+function resolveParam(paramName, scopeStack) {
+  // Walk from deepest scope to shallowest
+  for (let i = scopeStack.length - 1; i >= 0; i--) {
+    const scope = scopeStack[i];
+    const node = findNodeRecursiveFromRoot(scope.nodeId);
+    if (node && node.params && node.params[paramName] !== undefined) {
+      return node.params[paramName];
+    }
+  }
+  // Fallback defaults
+  const defaults = { d: 64, stream_dim: 64 };
+  return defaults[paramName] ?? 0;
+}
+
+// Find a node by ID anywhere in the project graph (for param resolution)
+function findNodeRecursiveFromRoot(nodeId) {
+  return _findNodeRec(projectGraph, nodeId);
+}
+function _findNodeRec(graph, nodeId) {
+  for (const n of graph.nodes) {
+    if (n.id === nodeId) return n;
+    if (n.children) {
+      const found = _findNodeRec(n.children, nodeId);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+// Check if a param is inherited (not locally owned) for a component type
+function isInheritedParam(componentType, paramName) {
+  const comp = getCompDef(componentType);
+  if (!comp) return false;
+  const schema = comp.params?.[paramName];
+  return schema?.inherit === true;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 async function apiPost(endpoint, data, method = 'POST') {
@@ -167,7 +208,7 @@ function createEmptyCard(name) {
       modelHash: null,
       totalSteps: 0,
     },
-    graphMode: false,
+    graphMode: true,
   };
 }
 
@@ -881,9 +922,9 @@ function getCooperativeDefaults(params) {
 
   return {
     nodes: [
-      { id: n1, type: "transformer", x: 80, y: 40, params: { d_model: sd, n_layers: 3, stream_dim: sd }, children: null },
-      { id: n2, type: "transformer", x: 80, y: 220, params: { d_model: sd, n_layers: 3, stream_dim: sd }, children: null },
-      { id: n3, type: "global_router", x: 400, y: 130, params: { stream_dim: sd, epsilon: 0.2 } },
+      { id: n1, type: "transformer", x: 80, y: 40, params: { d: sd, n_layers: 3 }, children: null },
+      { id: n2, type: "transformer", x: 80, y: 220, params: { d: sd, n_layers: 3 }, children: null },
+      { id: n3, type: "global_router", x: 400, y: 130, params: { epsilon: 0.2 } },
     ],
     edges: [
       // Boundary tokens → both experts
@@ -905,9 +946,9 @@ function getCooperativeDefaults(params) {
 }
 
 function getTransformerDefaults(params) {
-  const dm = params.d_model || 64;
+  const dm = params.d || params.d_model || 64;  // support both old and new param name
   const nl = params.n_layers || 3;
-  const sd = params.stream_dim || 64;
+  const sd = params.stream_dim || dm;  // inherit from cooperative, default to d
   const id = () => state.nextId++;
 
   const nodes = [];
@@ -919,13 +960,13 @@ function getTransformerDefaults(params) {
   let lastId = null, lastPort = null;
   let row = 0;
 
-  // Embedding: tokens → [d_model] vectors
+  // Embedding: tokens → [d] vectors (inherits d from parent transformer)
   const embId = id();
-  nodes.push({ id: embId, type: "embedding", x: 100, y: row * yStep + 60, params: { d_model: dm } });
+  nodes.push({ id: embId, type: "embedding", x: 100, y: row * yStep + 60, params: {} });
   edges.push({ id: id(), from: { nodeId: -1, portId: 'token_ids' }, to: { nodeId: embId, portId: 'in' } });
   lastId = embId; lastPort = 'out';
 
-  // Stream projection in (if stream_dim != d_model) — adds to embedding output
+  // Stream projection in (if stream_dim != d) — adds to embedding output
   if (sd !== dm) {
     const projIn = id();
     nodes.push({ id: projIn, type: "stream_proj_internal", x: 100 + xStep, y: row * yStep + 60, params: { d_in: sd, d_out: dm } });
@@ -937,13 +978,14 @@ function getTransformerDefaults(params) {
   row++;
 
   // Each layer block is a row: LN → Attn → LN → FFN (left to right)
+  // Children inherit d from the parent transformer — no params needed
   for (let i = 0; i < nl; i++) {
     const y = row * yStep + 60;
     const lnA = id(), att = id(), lnF = id(), ffn = id();
-    nodes.push({ id: lnA, type: "layer_norm",     x: 100,              y, params: { dim: dm } });
-    nodes.push({ id: att, type: "attention_layer", x: 100 + xStep,     y, params: { d_model: dm, n_heads: Math.max(1, dm / 16) } });
-    nodes.push({ id: lnF, type: "layer_norm",      x: 100 + xStep * 2, y, params: { dim: dm } });
-    nodes.push({ id: ffn, type: "ffn_layer",       x: 100 + xStep * 3, y, params: { d_model: dm, d_ff: dm * 4 } });
+    nodes.push({ id: lnA, type: "layer_norm",     x: 100,              y, params: {} });
+    nodes.push({ id: att, type: "attention_layer", x: 100 + xStep,     y, params: { n_heads: Math.max(1, dm / 16) } });
+    nodes.push({ id: lnF, type: "layer_norm",      x: 100 + xStep * 2, y, params: {} });
+    nodes.push({ id: ffn, type: "ffn_layer",       x: 100 + xStep * 3, y, params: { ff_mult: 4 } });
 
     // Wire within the row: LN→Attn→LN→FFN
     edges.push({ id: id(), from: { nodeId: lnA, portId: 'out' }, to: { nodeId: att, portId: 'in' } });
@@ -967,10 +1009,10 @@ function getTransformerDefaults(params) {
   const streamLastId = lastId;
   const streamLastPort = lastPort;
 
-  // Output head (logits path)
+  // Output head (logits path) — inherits d
   const y = row * yStep + 60;
   const outId = id();
-  nodes.push({ id: outId, type: "output_head", x: 100, y, params: { d_model: dm } });
+  nodes.push({ id: outId, type: "output_head", x: 100, y, params: {} });
   edges.push({ id: id(), from: { nodeId: streamLastId, portId: streamLastPort }, to: { nodeId: outId, portId: 'in' } });
   edges.push({ id: id(), from: { nodeId: outId, portId: 'out' }, to: { nodeId: -1, portId: 'logits_out' } });
 
@@ -988,17 +1030,16 @@ function getTransformerDefaults(params) {
 }
 
 function getOutputHeadDefaults(params) {
-  const dm = params.d_model || 64;
   const id = () => state.nextId++;
 
   const wId = id(), bId = id(), mmId = id(), addId = id();
 
   return {
     nodes: [
-      { id: wId,  type: "weight_param", x: 60,  y: 40,  params: { rows: dm, cols: dm } },
-      { id: mmId, type: "matmul",       x: 300, y: 40,  params: { d_in: dm, d_out: dm } },
-      { id: bId,  type: "bias_param",   x: 60,  y: 200, params: { dim: dm } },
-      { id: addId, type: "add_bias",    x: 300, y: 200, params: { dim: dm } },
+      { id: wId,  type: "weight_param", x: 60,  y: 40,  params: {} },
+      { id: mmId, type: "matmul",       x: 300, y: 40,  params: {} },
+      { id: bId,  type: "bias_param",   x: 60,  y: 200, params: {} },
+      { id: addId, type: "add_bias",    x: 300, y: 200, params: {} },
     ],
     edges: [
       // boundary hidden input → matmul x
@@ -1045,15 +1086,14 @@ function getStreamProjDefaults(params) {
 }
 
 function getEmbeddingDefaults(params) {
-  const dm = params.d_model || 64;
   const id = () => state.nextId++;
 
   const tableId = id(), lookupId = id();
 
   return {
     nodes: [
-      { id: tableId,  type: "embedding_table", x: 60,  y: 40,  params: { vocab_size: 65, d_model: dm } },
-      { id: lookupId, type: "lookup",           x: 300, y: 40,  params: { d_model: dm } },
+      { id: tableId,  type: "embedding_table", x: 60,  y: 40,  params: { vocab_size: 65 } },
+      { id: lookupId, type: "lookup",           x: 300, y: 40,  params: {} },
     ],
     edges: [
       // boundary token_ids → lookup ids
@@ -1067,25 +1107,25 @@ function getEmbeddingDefaults(params) {
 }
 
 function getGlobalRouterDefaults(params) {
-  const sd = params.stream_dim || 64;
   const nr = params.n_experts || 2;
   const eps = params.epsilon || 0.2;
   const id = () => state.nextId++;
 
   // mean_pool(stream) → W·x + b → softmax → ε-blend → broadcast
+  // Most children inherit d (= stream_dim) from parent
   const poolId = id(), wId = id(), mmId = id(), bId = id(), addId = id();
   const smId = id(), blendId = id(), bcastId = id();
 
   return {
     nodes: [
-      { id: poolId,  type: "mean_pool",    x: 300, y: 40,  params: { dim: sd } },
-      { id: wId,     type: "weight_param", x: 60,  y: 200, params: { rows: sd, cols: nr } },
-      { id: mmId,    type: "matmul",       x: 300, y: 200, params: { d_in: sd, d_out: nr } },
-      { id: bId,     type: "bias_param",   x: 60,  y: 360, params: { dim: nr } },
-      { id: addId,   type: "add_bias",     x: 300, y: 360, params: { dim: nr } },
-      { id: smId,    type: "softmax",      x: 300, y: 520, params: { dim: nr } },
+      { id: poolId,  type: "mean_pool",    x: 300, y: 40,  params: {} },
+      { id: wId,     type: "weight_param", x: 60,  y: 200, params: {} },
+      { id: mmId,    type: "matmul",       x: 300, y: 200, params: {} },
+      { id: bId,     type: "bias_param",   x: 60,  y: 360, params: {} },
+      { id: addId,   type: "add_bias",     x: 300, y: 360, params: {} },
+      { id: smId,    type: "softmax",      x: 300, y: 520, params: {} },
       { id: blendId, type: "eps_blend",    x: 300, y: 680, params: { n_experts: nr, epsilon: eps } },
-      { id: bcastId, type: "broadcast",    x: 300, y: 840, params: { dim: nr } },
+      { id: bcastId, type: "broadcast",    x: 300, y: 840, params: {} },
     ],
     edges: [
       // boundary stream → mean pool
@@ -1111,23 +1151,23 @@ function getGlobalRouterDefaults(params) {
 }
 
 function getLayerNormDefaults(params) {
-  const dim = params.dim || 64;
   const id = () => state.nextId++;
 
   // γ * (x - μ) / sqrt(σ² + ε) + β
+  // All children inherit d from parent
   const meanId = id(), subId = id(), varId = id(), normId = id();
   const gammaId = id(), mulId = id(), betaId = id(), addId = id();
 
   return {
     nodes: [
-      { id: meanId,  type: "reduce_mean", x: 60,  y: 40,  params: { dim } },
-      { id: subId,   type: "subtract",    x: 300, y: 40,  params: { dim } },
-      { id: varId,   type: "reduce_var",  x: 60,  y: 200, params: { dim } },
-      { id: normId,  type: "normalize",   x: 300, y: 200, params: { dim, eps: 1e-5 } },
-      { id: gammaId, type: "scale_param", x: 60,  y: 360, params: { dim } },
-      { id: mulId,   type: "elem_mul",    x: 300, y: 360, params: { dim } },
-      { id: betaId,  type: "bias_param",  x: 60,  y: 520, params: { dim } },
-      { id: addId,   type: "add_bias",    x: 300, y: 520, params: { dim } },
+      { id: meanId,  type: "reduce_mean", x: 60,  y: 40,  params: {} },
+      { id: subId,   type: "subtract",    x: 300, y: 40,  params: {} },
+      { id: varId,   type: "reduce_var",  x: 60,  y: 200, params: {} },
+      { id: normId,  type: "normalize",   x: 300, y: 200, params: { eps: 1e-5 } },
+      { id: gammaId, type: "scale_param", x: 60,  y: 360, params: {} },
+      { id: mulId,   type: "elem_mul",    x: 300, y: 360, params: {} },
+      { id: betaId,  type: "bias_param",  x: 60,  y: 520, params: {} },
+      { id: addId,   type: "add_bias",    x: 300, y: 520, params: {} },
     ],
     edges: [
       // boundary input → mean
@@ -1157,8 +1197,6 @@ function getLayerNormDefaults(params) {
 }
 
 function getFFNDefaults(params) {
-  const dm = params.d_model || 64;
-  const dff = params.d_ff || 256;
   const id = () => state.nextId++;
 
   // Layer 1: x @ W1 + b1 → ReLU
@@ -1166,17 +1204,18 @@ function getFFNDefaults(params) {
   // Layer 2: ReLU(…) @ W2 + b2
   const w2 = id(), b2 = id(), mm2 = id(), add2 = id();
 
+  // All math children inherit d from parent. No params needed.
   return {
     nodes: [
-      { id: w1,   type: "weight_param", x: 60,  y: 40,  params: { rows: dm, cols: dff } },
-      { id: mm1,  type: "matmul",       x: 300, y: 40,  params: { d_in: dm, d_out: dff } },
-      { id: b1,   type: "bias_param",   x: 60,  y: 200, params: { dim: dff } },
-      { id: add1, type: "add_bias",     x: 300, y: 200, params: { dim: dff } },
-      { id: relu, type: "relu",         x: 300, y: 360, params: { dim: dff } },
-      { id: w2,   type: "weight_param", x: 60,  y: 520, params: { rows: dff, cols: dm } },
-      { id: mm2,  type: "matmul",       x: 300, y: 520, params: { d_in: dff, d_out: dm } },
-      { id: b2,   type: "bias_param",   x: 60,  y: 680, params: { dim: dm } },
-      { id: add2, type: "add_bias",     x: 300, y: 680, params: { dim: dm } },
+      { id: w1,   type: "weight_param", x: 60,  y: 40,  params: {} },
+      { id: mm1,  type: "matmul",       x: 300, y: 40,  params: {} },
+      { id: b1,   type: "bias_param",   x: 60,  y: 200, params: {} },
+      { id: add1, type: "add_bias",     x: 300, y: 200, params: {} },
+      { id: relu, type: "relu",         x: 300, y: 360, params: {} },
+      { id: w2,   type: "weight_param", x: 60,  y: 520, params: {} },
+      { id: mm2,  type: "matmul",       x: 300, y: 520, params: {} },
+      { id: b2,   type: "bias_param",   x: 60,  y: 680, params: {} },
+      { id: add2, type: "add_bias",     x: 300, y: 680, params: {} },
     ],
     edges: [
       // boundary input → matmul1 x
@@ -1816,15 +1855,18 @@ function bindParamHandlers(container, targetNode) {
       } else {
         targetNode.params[param] = parseInt(el.value);
       }
-      // Regenerate children with updated params (atomic: nodes + edges together)
-      const defaults = getDefaultChildren(targetNode.type, targetNode.params);
-      if (defaults) {
-        targetNode.children = defaults;
-        for (const cn of targetNode.children.nodes) {
-          if (cn.id >= state.nextId) state.nextId = cn.id + 1;
-        }
-        for (const ce of targetNode.children.edges) {
-          if (ce.id >= state.nextId) state.nextId = ce.id + 1;
+      // With inherited params, children don't store copies — no regeneration needed.
+      // Only regenerate if n_layers changed (structural change, not just param).
+      if (param === 'n_layers' && targetNode.children) {
+        const defaults = getDefaultChildren(targetNode.type, targetNode.params);
+        if (defaults) {
+          targetNode.children = defaults;
+          for (const cn of targetNode.children.nodes) {
+            if (cn.id >= state.nextId) state.nextId = cn.id + 1;
+          }
+          for (const ce of targetNode.children.edges) {
+            if (ce.id >= state.nextId) state.nextId = ce.id + 1;
+          }
         }
       }
     });
@@ -2818,10 +2860,9 @@ async function doResetWeights() {
   if (!confirm('Reset all weights to random initialization? Training progress will be lost.')) return;
   try {
     const resetPipeline = getPipelineGraph(card || getActiveCard());
-    const graphMode = card.graphMode || false;
-    if (graphMode) ensureAllChildren(resetPipeline);
+    ensureAllChildren(resetPipeline);
     const dataFile = document.getElementById('train-data-file')?.value?.trim() || 'data/input.txt';
-    const payload = { version: 2, graph: serializeGraph(resetPipeline), card_id: card.id, graph_mode: graphMode, data_file: dataFile };
+    const payload = { version: 2, graph: serializeGraph(resetPipeline), card_id: card.id, graph_mode: true, data_file: dataFile };
     const data = await apiPost('/api/build', payload);
     if (data.built) {
       eng.lossHistory = [];
@@ -2843,12 +2884,10 @@ async function doBuild(card) {
 
   try {
     const pipelineGraph = getPipelineGraph(card);
-    const graphMode = card.graphMode || false;
-    // In graph mode, ensure all children are populated before serializing
-    if (graphMode) ensureAllChildren(pipelineGraph);
+    ensureAllChildren(pipelineGraph);
     const clientHash = await computeModelHash(pipelineGraph);
     const dataFile = document.getElementById('train-data-file')?.value?.trim() || 'data/input.txt';
-    const payload = { version: 2, graph: serializeGraph(pipelineGraph), card_id: card.id, hash: clientHash, data_file: dataFile, graph_mode: graphMode };
+    const payload = { version: 2, graph: serializeGraph(pipelineGraph), card_id: card.id, hash: clientHash, data_file: dataFile, graph_mode: true };
     const data = await apiPost('/api/build', payload);
 
     if (data.built) {
@@ -3372,6 +3411,7 @@ function autoSaveProject() {
   if (!_autoSaveEnabled) return;
   try {
     const data = {
+      formatVersion: PROJECT_FORMAT_VERSION,
       cards: cards.map(c => ({
         name: c.name,
         starred: c.starred,
@@ -3391,12 +3431,19 @@ function autoSaveProject() {
   }
 }
 
+const PROJECT_FORMAT_VERSION = 2;  // bump when breaking format changes
+
 function restoreProject() {
   try {
     const raw = localStorage.getItem('projectState');
     if (!raw) return false;
     const data = JSON.parse(raw);
     if (!data.cards || !data.projectGraph) return false;
+    // Clean break: clear old format data
+    if ((data.formatVersion || 1) < PROJECT_FORMAT_VERSION) {
+      localStorage.removeItem('projectState');
+      return false;
+    }
 
     // Restore project graph
     projectGraph.nodes.length = 0;
@@ -3646,11 +3693,6 @@ function renderExpandedCard(card) {
         <button class="toolbar-btn btn-export" style="flex:1;font-size:12px;padding:4px 8px">Export</button>
         <button class="toolbar-btn btn-import" style="flex:1;font-size:12px;padding:4px 8px">Import</button>
       </div>
-      <div style="padding:2px 12px">
-        <label style="font-size:11px;color:var(--text-dim);cursor:pointer;display:flex;align-items:center;gap:4px">
-          <input type="checkbox" class="chk-graph-mode" ${card.graphMode ? 'checked' : ''}> Graph execution
-        </label>
-      </div>
       ${modelInfoHtml}
       ${eng.built ? `
         <div class="prop-group" style="display:flex;gap:4px">
@@ -3691,11 +3733,6 @@ function bindExpandedCardEvents(div, card, idx) {
     e.stopPropagation();
     card.starred = !card.starred;
     renderCardList();
-  });
-
-  // Graph mode toggle
-  div.querySelector('.chk-graph-mode')?.addEventListener('change', (e) => {
-    card.graphMode = e.target.checked;
   });
 
   // Engine buttons

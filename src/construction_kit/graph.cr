@@ -92,6 +92,36 @@ module ConstructionKit
     end
   end
 
+  # Param inheritance context — accumulates inherited params as the compiler
+  # recurses into nested scopes. Children resolve `d` from the nearest ancestor.
+  class ParamContext
+    getter values : Hash(String, Int32 | Float64)
+
+    def initialize(parent : ParamContext? = nil)
+      @values = parent ? parent.values.dup : {} of String => (Int32 | Float64)
+    end
+
+    def set(key : String, value : Int32 | Float64)
+      @values[key] = value
+    end
+
+    def get_i(key : String, default : Int32 = 0) : Int32
+      if v = @values[key]?
+        v.is_a?(Int32) ? v : v.to_i32
+      else
+        default
+      end
+    end
+
+    def get_f(key : String, default : Float64 = 0.0) : Float64
+      if v = @values[key]?
+        v.is_a?(Float64) ? v : v.to_f64
+      else
+        default
+      end
+    end
+  end
+
   # Top-level graph document (versioned)
   class GraphDocument
     include JSON::Serializable
