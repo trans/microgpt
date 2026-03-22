@@ -2,38 +2,52 @@
   import { onMount } from 'svelte';
   import { registry } from './lib/stores/ui.js';
   import { nodes, edges, groups } from './lib/stores/graph.js';
+  import { createDemoGraph } from './lib/defaults.js';
+  import GraphCanvas from './lib/components/GraphCanvas.svelte';
 
   let loaded = false;
+  let canvas;
 
   onMount(async () => {
     const resp = await fetch('/components.json');
     const data = await resp.json();
     registry.set(data);
+
+    createDemoGraph();
     loaded = true;
+
+    // Fit after first render
+    setTimeout(() => canvas?.fitToView(), 100);
   });
 </script>
 
 <div id="app">
   {#if loaded}
     <div id="left-panel">
-      <h3 style="padding: 12px; color: #4a90d9;">microGPT</h3>
-      <p style="padding: 0 12px; font-size: 12px; color: #888;">
-        Svelte frontend — under construction.
-      </p>
-      <p style="padding: 0 12px; font-size: 11px; color: #666;">
-        Nodes: {$nodes.length} | Edges: {$edges.length} | Groups: {Object.keys($groups).length}
-      </p>
+      <div class="panel-header">
+        <h3>microGPT</h3>
+      </div>
+      <div class="panel-body">
+        <p class="info">
+          {$nodes.length} nodes &middot; {$edges.length} edges &middot; {Object.keys($groups).length} groups
+        </p>
+      </div>
     </div>
+
     <div id="canvas-wrap">
-      <p style="color: #555; text-align: center; margin-top: 40vh;">
-        GraphCanvas component coming next...
-      </p>
+      <GraphCanvas bind:this={canvas} />
     </div>
+
     <div id="right-panel">
-      <h3 style="padding: 12px; color: #4a90d9;">Engines</h3>
+      <div class="panel-header">
+        <h3>Engines</h3>
+      </div>
+      <div class="panel-body">
+        <p class="info">Card management coming soon.</p>
+      </div>
     </div>
   {:else}
-    <p style="color: #888; text-align: center; margin-top: 40vh;">Loading...</p>
+    <div class="loading">Loading...</div>
   {/if}
 </div>
 
@@ -46,25 +60,54 @@
     height: 100vh;
     overflow: hidden;
   }
+  :global(*) { box-sizing: border-box; }
+
   #app {
     display: flex;
     height: 100%;
   }
-  #left-panel {
-    width: 250px;
+  #left-panel, #right-panel {
+    width: 260px;
     background: #16213e;
-    border-right: 1px solid #333;
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
+  #left-panel { border-right: 1px solid #333; }
+  #right-panel { border-left: 1px solid #333; }
   #canvas-wrap {
     flex: 1;
     position: relative;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
-  #right-panel {
-    width: 260px;
-    background: #16213e;
-    border-left: 1px solid #333;
-    flex-shrink: 0;
+  .panel-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid #333;
+  }
+  .panel-header h3 {
+    margin: 0;
+    font-size: 14px;
+    color: #4a90d9;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .panel-body {
+    padding: 12px 16px;
+    flex: 1;
+    overflow-y: auto;
+  }
+  .info {
+    font-size: 11px;
+    color: #666;
+  }
+  .loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #666;
   }
 </style>
