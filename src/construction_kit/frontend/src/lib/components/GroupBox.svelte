@@ -16,6 +16,12 @@
 
   const dispatch = createEventDispatcher();
 
+  // TODO: Smart port positioning — ports migrate to the side (top/bottom/left/right)
+  // closest to the average position of connected nodes. This would reduce wire
+  // crossings. Current design enforces left-to-right flow which may be desirable.
+  // Alternative idea: "antenna" lines extending from top/bottom of box with ports
+  // along them. Revisit when the core UI is complete.
+
   $: comp = getCompDef(groupInfo?.type, $registry);
   $: color = comp?.color || '#666';
   $: label = groupInfo?.label || groupPath.split('.').pop();

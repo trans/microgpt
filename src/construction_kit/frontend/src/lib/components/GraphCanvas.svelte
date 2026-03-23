@@ -13,6 +13,10 @@
   let panning = false;
   let panStart = { x: 0, y: 0 };
 
+  // Wall port layout constants
+  const WALL_PORT_START_Y = -50;
+  const WALL_PORT_SPACING = 40;
+
   // Interaction state
   let dragging = null;     // { nodeId, startX, startY } or { groupPath, startX, startY }
   let connecting = null;   // { fromNodeId, fromPortId }
@@ -35,7 +39,11 @@
       const x = info?._x ?? autoX;
       const y = info?._y ?? autoY;
       const { inputs, outputs } = groupBoundaryPorts(gp, nodesVal, edgesVal);
-      boxes.push({ path: gp, info, x, y, w: boxW, h: boxH, inputs, outputs });
+      // Count deduplicated ports (same logic as GroupBox)
+      const nIn = new Set(inputs.map(e => `${e.from.nodeId}:${e.from.portId}`)).size;
+      const nOut = new Set(outputs.map(e => `${e.to.nodeId}:${e.to.portId}`)).size;
+      const autoH = Math.max(boxH, 24 + Math.max(nIn, nOut) * 16);
+      boxes.push({ path: gp, info, x, y, w: boxW, h: autoH, inputs, outputs });
       autoX += boxW + gap;
       if (autoX > 600) { autoX = 0; autoY -= boxH + gap; }
     }
@@ -97,9 +105,9 @@
 
   // ── Edge positions ──────────────────────────────────────────────────────
 
-  $: edgePositions = computeEdgePositions($edges, visibleNodes, groupBoxes, $nodes, wallPorts, $currentGroup);
+  $: edgePositions = computeEdgePositions($edges, visibleNodes, groupBoxes, $nodes, wallPorts, $currentGroup, WALL_X_IN, WALL_X_OUT);
 
-  function computeEdgePositions(edgesVal, visible, gBoxes, allNodes, walls, curGroup) {
+  function computeEdgePositions(edgesVal, visible, gBoxes, allNodes, walls, curGroup, wallXIn, wallXOut) {
     const visibleIds = new Set(visible.map(n => n.id));
     const results = [];
 
@@ -118,9 +126,10 @@
     const wallEdgeIds = new Set();
 
     // Wall port edges: from wall → internal nodes (inside view)
+
     if (curGroup && walls) {
       walls.inputs.forEach((wp, wpIdx) => {
-        const wallY = -50 + wpIdx * 40;
+        const wallY = WALL_PORT_START_Y + wpIdx * WALL_PORT_SPACING;
         wp.edges.forEach(e => {
           wallEdgeIds.add(e.id);
           const toVisible = visibleIds.has(e.to.nodeId);
@@ -131,16 +140,16 @@
           } else if (toBox) {
             const idx = boxInputCounts.get(toBox.path) || 0;
             boxInputCounts.set(toBox.path, idx + 1);
-            toPos = { x: toBox.x, y: toBox.y + 15 + idx * 14 };
+            toPos = { x: toBox.x, y: toBox.y + 30 + idx * 16 };
           }
           if (toPos) {
-            results.push({ edge: e, from: { x: WALL_X_IN, y: wallY }, to: toPos });
+            results.push({ edge: e, from: { x: wallXIn, y: wallY }, to: toPos });
           }
         });
       });
 
       walls.outputs.forEach((wp, wpIdx) => {
-        const wallY = -50 + wpIdx * 40;
+        const wallY = WALL_PORT_START_Y + wpIdx * WALL_PORT_SPACING;
         wp.edges.forEach(e => {
           wallEdgeIds.add(e.id);
           const fromVisible = visibleIds.has(e.from.nodeId);
@@ -151,30 +160,40 @@
           } else if (fromBox) {
             const idx = boxOutputCounts.get(fromBox.path) || 0;
             boxOutputCounts.set(fromBox.path, idx + 1);
-            fromPos = { x: fromBox.x + fromBox.w, y: fromBox.y + 15 + idx * 14 };
+            fromPos = { x: fromBox.x + fromBox.w, y: fromBox.y + 30 + idx * 16 };
           }
           if (fromPos) {
-            results.push({ edge: e, from: fromPos, to: { x: WALL_X_OUT, y: wallY } });
+            results.push({ edge: e, from: fromPos, to: { x: wallXOut, y: wallY } });
           }
         });
       });
     }
 
-    // Regular edges (between visible nodes and group boxes)
-    // Deduplicate: multiple edges from same visible node to same group box → one wire
+    // Regular edges — deduplicate first, then assign positions
+    // Build deduped list: group edges by (source key → target key)
+    const regularEdges = [];
     const seenBoxEdges = new Set();
 
     for (const e of edgesVal) {
       if (wallEdgeIds.has(e.id)) continue;
-
       const fromVisible = visibleIds.has(e.from.nodeId);
       const toVisible = visibleIds.has(e.to.nodeId);
       const fromBox = nodeToGroupBox.get(e.from.nodeId);
       const toBox = nodeToGroupBox.get(e.to.nodeId);
-
-      // Skip edges where both ends are in the same collapsed group
       if (fromBox && toBox && fromBox.path === toBox.path) continue;
+      if (!fromVisible && !fromBox) continue;
+      if (!toVisible && !toBox) continue;
 
+      // Dedup key for group box edges
+      const dedupeKey = (fromVisible ? `n${e.from.nodeId}:${e.from.portId}` : `g${fromBox?.path}`) + '→' +
+                        (toVisible ? `n${e.to.nodeId}:${e.to.portId}` : `g${toBox?.path}`);
+      if ((!fromVisible || !toVisible) && seenBoxEdges.has(dedupeKey)) continue;
+      seenBoxEdges.add(dedupeKey);
+      regularEdges.push({ e, fromVisible, toVisible, fromBox, toBox });
+    }
+
+    // Now assign positions with correct indices
+    for (const { e, fromVisible, toVisible, fromBox, toBox } of regularEdges) {
       let fromPos = null, toPos = null;
 
       if (fromVisible) {
@@ -194,13 +213,6 @@
       }
 
       if (fromPos && toPos) {
-        // Deduplicate edges from same source to same group box
-        const dedupeKey = (fromVisible ? `n${e.from.nodeId}` : `g${fromBox?.path}`) + '→' +
-                          (toVisible ? `n${e.to.nodeId}` : `g${toBox?.path}`);
-        if (!fromVisible || !toVisible) {
-          if (seenBoxEdges.has(dedupeKey)) continue;
-          seenBoxEdges.add(dedupeKey);
-        }
         results.push({ edge: e, from: fromPos, to: toPos });
       }
     }
@@ -432,7 +444,7 @@
       <!-- Wall ports (incoming/outgoing edges from parent scope) -->
       {#if $currentGroup}
         {#each wallPorts.inputs as wp, i}
-          {@const wy = -50 + i * 40}
+          {@const wy = WALL_PORT_START_Y + i * WALL_PORT_SPACING}
           {@const portId = wp.key.split(':')[1] || 'in'}
           {@const firstEdge = wp.edges[0]}
           {@const srcNode = firstEdge ? findNode(firstEdge.from.nodeId) : null}
@@ -455,7 +467,7 @@
           </g>
         {/each}
         {#each wallPorts.outputs as wp, i}
-          {@const wy = -50 + i * 40}
+          {@const wy = WALL_PORT_START_Y + i * WALL_PORT_SPACING}
           {@const portId = wp.key.split(':')[1] || 'out'}
           {@const firstEdge = wp.edges[0]}
           {@const dstNode = firstEdge ? findNode(firstEdge.to.nodeId) : null}
