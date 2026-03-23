@@ -32,10 +32,10 @@
       const gNodes = nodesUnderGroup(gp, nodesVal);
       if (gNodes.length === 0) continue;
       const info = groupsVal[gp];
-      // Use stored position or auto-layout
       const x = info?._x ?? autoX;
       const y = info?._y ?? autoY;
-      boxes.push({ path: gp, info, x, y, w: boxW, h: boxH });
+      const { inputs, outputs } = groupBoundaryPorts(gp, nodesVal, edgesVal);
+      boxes.push({ path: gp, info, x, y, w: boxW, h: boxH, inputs, outputs });
       autoX += boxW + gap;
       if (autoX > 600) { autoX = 0; autoY -= boxH + gap; }
     }
@@ -182,7 +182,7 @@
       } else if (fromBox) {
         const idx = boxOutputCounts.get(fromBox.path) || 0;
         boxOutputCounts.set(fromBox.path, idx + 1);
-        fromPos = { x: fromBox.x + fromBox.w, y: fromBox.y + 15 + idx * 14 };
+        fromPos = { x: fromBox.x + fromBox.w, y: fromBox.y + 30 + idx * 16 };
       }
 
       if (toVisible) {
@@ -190,7 +190,7 @@
       } else if (toBox) {
         const idx = boxInputCounts.get(toBox.path) || 0;
         boxInputCounts.set(toBox.path, idx + 1);
-        toPos = { x: toBox.x, y: toBox.y + 15 + idx * 14 };
+        toPos = { x: toBox.x, y: toBox.y + 30 + idx * 16 };
       }
 
       if (fromPos && toPos) {
@@ -485,6 +485,8 @@
           groupPath={box.path}
           groupInfo={box.info}
           x={box.x} y={box.y} w={box.w} h={box.h}
+          inputEdges={box.inputs}
+          outputEdges={box.outputs}
           on:drillIn={onGroupDrillIn}
           on:groupMouseDown={onGroupMouseDown}
         />
