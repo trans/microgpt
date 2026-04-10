@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { registry, currentGroup } from './lib/stores/ui.js';
-  import { nodes, edges, groups } from './lib/stores/graph.js';
+  import { nodes, edges, groups, serializeGraph } from './lib/stores/graph.js';
   import { createDemoGraph } from './lib/defaults.js';
   import { createEditor } from './lib/rete/editor.js';
   import { syncScopeToRete, setupReteListeners } from './lib/rete/sync.js';
@@ -10,6 +10,11 @@
   let loaded = false;
   let containerEl;
   let editorInstance = null;
+  let dataFile = 'data/input.txt';
+  let buildBusy = false;
+  let buildError = '';
+  let buildResult = null;
+  const cardId = 'default';
 
   onMount(async () => {
     const resp = await fetch('/components.json');
@@ -48,6 +53,48 @@
     currentGroup.set(groupPath);
   }
 
+  async function buildModel() {
+    buildBusy = true;
+    buildError = '';
+
+    try {
+      const payload = {
+        ...serializeGraph(),
+        card_id: cardId,
+        data_file: dataFile,
+        graph_mode: true,
+      };
+
+      const resp = await fetch('/api/build', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        throw new Error(data?.details?.join('\n') || data?.error || 'Build failed');
+      }
+
+      buildResult = data;
+    } catch (err) {
+      buildError = err.message || String(err);
+      buildResult = null;
+    } finally {
+      buildBusy = false;
+    }
+  }
+
+  function exportGraph() {
+    const blob = new Blob([JSON.stringify(serializeGraph(), null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'microgpt-graph.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   onDestroy(() => {
     editorInstance?.destroy();
   });
@@ -73,10 +120,47 @@
 
     <div id="right-panel">
       <div class="panel-header">
-        <h3>Engines</h3>
+        <h3>Build</h3>
       </div>
       <div class="panel-body">
-        <p class="info">Card management coming soon.</p>
+        <label class="field">
+          <span>Training Data</span>
+          <input bind:value={dataFile} />
+        </label>
+
+        <div class="actions">
+          <button on:click={buildModel} disabled={buildBusy}>
+            {buildBusy ? 'Building…' : 'Build Model'}
+          </button>
+          <button class="secondary" on:click={exportGraph}>Export JSON</button>
+        </div>
+
+        {#if buildError}
+          <p class="error">{buildError}</p>
+        {/if}
+
+        {#if buildResult?.summary}
+          <div class="summary">
+            <p><strong>Params</strong> {buildResult.summary.total_params}</p>
+            <p><strong>Experts</strong> {buildResult.summary.n_experts}</p>
+            <p><strong>Router</strong> {buildResult.summary.router}</p>
+            <p><strong>Seq Len</strong> {buildResult.summary.seq_len}</p>
+            <p><strong>Vocab</strong> {buildResult.summary.vocab_size}</p>
+            {#if buildResult.model_hash}
+              <p><strong>Hash</strong> <code>{buildResult.model_hash}</code></p>
+            {/if}
+            {#if buildResult.graph_warnings?.length}
+              <div class="warnings">
+                <strong>Warnings</strong>
+                {#each buildResult.graph_warnings as warning}
+                  <p>{warning}</p>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {:else}
+          <p class="info">Build the current graph or export it as backend JSON.</p>
+        {/if}
       </div>
     </div>
   {:else}
@@ -137,6 +221,64 @@
     padding: 12px 16px;
     flex: 1;
     overflow-y: auto;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .field span {
+    font-size: 11px;
+    color: #8ea5c0;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .field input {
+    border: 1px solid #31415d;
+    background: #0f1a31;
+    color: inherit;
+    padding: 9px 10px;
+    border-radius: 8px;
+  }
+  .actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  button {
+    border: 0;
+    border-radius: 8px;
+    padding: 9px 12px;
+    background: #4a90d9;
+    color: white;
+    cursor: pointer;
+    font-weight: 700;
+  }
+  button.secondary {
+    background: #31415d;
+  }
+  button:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  .summary p, .warnings p {
+    margin: 0 0 8px;
+    font-size: 12px;
+  }
+  .summary strong, .warnings strong {
+    color: #8ea5c0;
+    margin-right: 8px;
+  }
+  .warnings {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #2a3951;
+  }
+  .error {
+    color: #ff8a8a;
+    font-size: 12px;
+    white-space: pre-wrap;
   }
   .info {
     font-size: 11px;

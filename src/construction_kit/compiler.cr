@@ -117,7 +117,7 @@ module ConstructionKit
     end
 
     COMPOUND_TYPES = Set{
-      "layer_norm", "attention_layer", "loss",
+      "layer_norm", "attention_layer", "ffn_layer", "stream_proj_internal", "loss",
     }
 
     # Is this a math primitive type (leaf-level executable)?
@@ -209,6 +209,14 @@ module ConstructionKit
 
       when "loss"
         MathLossExec.new(id)
+
+      when "ffn_layer"
+        FFNExec.new(id, d, d_ff)
+
+      when "stream_proj_internal"
+        d_in = node.param_i("d_in", d)
+        d_out = node.param_i("d_out", d)
+        StreamProjExec.new(id, d_in, d_out)
 
       # Router (compound for now)
       when "global_router"
@@ -327,6 +335,24 @@ module ConstructionKit
     private def trace_through_skipped(port : PortRef, graph : GraphData, prefix : String) : {String, String}?
       node = graph.find_node(port.nodeId)
       return nil unless node
+
+      if TOKENIZER_TYPES.includes?(node.type)
+        return {"__boundary__", "token_ids"} if port.portId == "token_ids"
+      end
+
+      if WINDOWER_TYPES.includes?(node.type)
+        case port.portId
+        when "input_ids"
+          return {"__boundary__", "input_ids"}
+        when "target_ids"
+          return {"__boundary__", "target_ids"}
+        end
+      end
+
+      if {"zero_init", "random_init", "learned_init"}.includes?(node.type)
+        return {"__boundary__", port.portId}
+      end
+
       graph.edges.each do |e|
         next unless e.to.nodeId == node.id
         if e.from.nodeId == -1

@@ -31,6 +31,12 @@ build-kit:
     cc -c -O2 src/cuda/stubs.c -o build/kernels.o
     timeout 3m crystal build src/construction_kit/server.cr -o bin/construction-kit --link-flags="{{root}}/build/kernels.o"
 
+# Build construction kit CLI (CPU)
+build-kit-cli:
+    mkdir -p build bin
+    cc -c -O2 src/cuda/stubs.c -o build/kernels.o
+    timeout 3m crystal build src/construction_kit/cli.cr -o bin/construction-kit-cli --link-flags="{{root}}/build/kernels.o"
+
 # Build construction kit server with CUDA
 build-kit-cuda:
     mkdir -p build bin
@@ -40,6 +46,10 @@ build-kit-cuda:
 # Run construction kit server
 kit *ARGS:
     bin/construction-kit {{ARGS}}
+
+# Run construction kit CLI
+kit-cli *ARGS:
+    bin/construction-kit-cli {{ARGS}}
 
 # Run Svelte frontend dev server (proxy to kit on 8081)
 kit-dev:
@@ -90,6 +100,19 @@ bench steps="100":
         rm -f "$tmpout"
         printf "%-14s %8s %11s %11s\n" "$heads" "{{steps}}" "$loss" "$elapsed"
     done
+
+# Compare standard window training against AGPT using a saved index
+compare-agpt data="data/input.txt" steps="50" backend="crystal" seq_len="128" d_model="64" n_layers="2" agpt_starts="20000" agpt_offset="0" agpt_progress="0" seed="1234":
+    STEPS={{steps}} \
+    BACKEND={{backend}} \
+    SEQ_LEN={{seq_len}} \
+    D_MODEL={{d_model}} \
+    N_LAYERS={{n_layers}} \
+    AGPT_STARTS={{agpt_starts}} \
+    AGPT_OFFSET={{agpt_offset}} \
+    AGPT_PROGRESS={{agpt_progress}} \
+    SEED={{seed}} \
+    bash scripts/compare_window_agpt.sh {{data}}
 
 # Run tokenizer benchmark (default 10 MB)
 #bench-tokenizer size="10":

@@ -172,6 +172,7 @@ module ConstructionKit
       zero_stream = MicroGPT::Mat.new(seq_len, 64)
       boundary = {
         "in"         => input_ids.as(Tensor),
+        "ids"        => input_ids.as(Tensor),
         "input_ids"  => input_ids.as(Tensor),
         "token_ids"  => input_ids.as(Tensor),
         "targets"    => target_ids.as(Tensor),
@@ -205,12 +206,16 @@ module ConstructionKit
       max_tokens.times do
         # Use last seq_len tokens
         window = ids.size > seq_len ? ids[-seq_len..] : ids
+        zero_stream = MicroGPT::Mat.new(window.size, 64)
         # Forward through all nodes except loss
         activations = {} of String => Hash(String, Tensor)
         activations["__boundary__"] = {
           "in" => window.as(Tensor),
+          "ids" => window.as(Tensor),
           "input_ids" => window.as(Tensor),
           "token_ids" => window.as(Tensor),
+          "stream_in" => zero_stream.as(Tensor),
+          "stream_out" => zero_stream.as(Tensor),
         }
 
         logits_mat = nil

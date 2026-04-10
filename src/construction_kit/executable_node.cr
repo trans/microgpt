@@ -171,7 +171,11 @@ module ConstructionKit
     end
 
     def backward(output_grads : Hash(String, MicroGPT::Mat)) : Hash(String, MicroGPT::Mat)
-      {"in" => @inner.backward(output_grads["out"])}
+      if grad = output_grads["out"]?
+        {"in" => @inner.backward(grad)}
+      else
+        {} of String => MicroGPT::Mat
+      end
     end
 
     def update(lr : Float64)
@@ -390,7 +394,11 @@ module ConstructionKit
     end
 
     def backward(output_grads : Hash(String, MicroGPT::Mat)) : Hash(String, MicroGPT::Mat)
-      {"in" => @inner.backward(output_grads["out"])}
+      if grad = output_grads["out"]?
+        {"in" => @inner.backward(grad)}
+      else
+        {} of String => MicroGPT::Mat
+      end
     end
 
     def update(lr : Float64)

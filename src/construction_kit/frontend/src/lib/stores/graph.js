@@ -3,6 +3,7 @@
 // All edges direct primitive-to-primitive. No boundaries.
 
 import { writable, derived } from 'svelte/store';
+import { serializeGraphDocument, deserializeGraphDocument } from '../graph_document.js';
 
 // ── Core State ──────────────────────────────────────────────────────────────
 
@@ -124,11 +125,11 @@ export function serializeGraph() {
   const unsub1 = nodes.subscribe(ns => {
     const unsub2 = edges.subscribe(es => {
       const unsub3 = groups.subscribe(gs => {
-        result = {
+        result = serializeGraphDocument({
           nodes: ns.map(n => ({ id: n.id, type: n.type, group: n.group, x: n.x, y: n.y, params: n.params })),
           edges: es.map(e => ({ id: e.id, from: e.from, to: e.to })),
           groups: { ...gs },
-        };
+        });
       });
       unsub3();
     });
@@ -138,7 +139,7 @@ export function serializeGraph() {
   return result;
 }
 
-export function deserializeGraph(data) {
+function loadFlatGraph(data) {
   const ns = (data.nodes || []).map(n => ({
     id: n.id, type: n.type, group: n.group || '', x: n.x || 0, y: n.y || 0, params: n.params || {},
   }));
@@ -153,6 +154,19 @@ export function deserializeGraph(data) {
   nodes.set(ns);
   edges.set(es);
   groups.set(data.groups || {});
+}
+
+export function deserializeGraph(data, registryValue = null) {
+  if (data?.groups || data?.nodes?.some?.(n => Object.prototype.hasOwnProperty.call(n, 'group'))) {
+    loadFlatGraph(data);
+    return;
+  }
+
+  const restored = deserializeGraphDocument(data, registryValue);
+  setNextId(restored.nextId);
+  nodes.set(restored.nodes);
+  edges.set(restored.edges);
+  groups.set(restored.groups);
 }
 
 export function clearGraph() {
@@ -193,4 +207,3 @@ export function nodesUnderGroup(groupPath, nodesValue) {
   const prefix = groupPath + '.';
   return nodesValue.filter(n => n.group === groupPath || n.group.startsWith(prefix));
 }
-

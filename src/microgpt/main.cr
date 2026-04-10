@@ -1,8 +1,10 @@
 require "../microgpt"
+require "../agpt"
 require "jargon"
 require "yaml"
 
 module MicroGPT
+  AGPT_TOKENIZER_TAG = "char.sorted_unique.v1"
 
   SCHEMA = %({
     "type": "object",
@@ -18,6 +20,10 @@ module MicroGPT
         "description": "Training steps (0 = inference only)",
         "default": 1000,
         "short": "s"
+      },
+      "seed": {
+        "type": "integer",
+        "description": "Deterministic RNG seed for model init and sampling"
       },
       "heads": {
         "type": "string",
@@ -117,6 +123,39 @@ module MicroGPT
         "description": "Router type: global, context, gated",
         "enum": ["global", "context", "gated"],
         "default": "global"
+      },
+      "agpt": {
+        "type": "boolean",
+        "description": "Train with AGPT replay-prefix mode instead of sampled windows",
+        "default": false
+      },
+      "agpt-max-starts": {
+        "type": "integer",
+        "description": "Limit AGPT trie construction to N evenly distributed corpus start positions (0 = all)",
+        "default": 10000
+      },
+      "agpt-start-offset": {
+        "type": "integer",
+        "description": "Deterministic offset applied to evenly distributed AGPT start positions",
+        "default": 0
+      },
+      "agpt-progress": {
+        "type": "integer",
+        "description": "Print AGPT trie build progress every N start positions (0 = off)",
+        "default": 0
+      },
+      "agpt-save-index": {
+        "type": "string",
+        "description": "Save the built AGPT trie index to this path"
+      },
+      "agpt-load-index": {
+        "type": "string",
+        "description": "Load a previously saved AGPT trie index from this path"
+      },
+      "build-only": {
+        "type": "boolean",
+        "description": "Build/load and report model state without training or generation",
+        "default": false
       }
     },
     "required": ["file"]
@@ -205,6 +244,7 @@ module MicroGPT
     cli.run do |result|
       filename    = result["file"].as_s
       steps       = result["steps"].as_i64.to_i
+      seed_value  = result["seed"]?.try(&.as_i64)
       head_type   = result["heads"].as_s
       backend     = result["backend"].as_s
       seq_len     = result["seq-len"].as_i64.to_i
@@ -227,6 +267,13 @@ module MicroGPT
       use_calculator = false
       bigram_off_at = result["bigram-off-at"].as_i64.to_i
       router_type  = result["router"].as_s
+      agpt_mode    = result["agpt"]?.try(&.as_bool) || false
+      agpt_max_starts = result["agpt-max-starts"].as_i64.to_i
+      agpt_start_offset = result["agpt-start-offset"].as_i64.to_i
+      agpt_progress = result["agpt-progress"].as_i64.to_i
+      agpt_save_index = result["agpt-save-index"]?.try(&.as_s)
+      agpt_load_index = result["agpt-load-index"]?.try(&.as_s)
+      build_only = result["build-only"]?.try(&.as_bool) || false
 
       # --- Load config from YAML if provided ---
       # YAML provides base values; explicit CLI flags override them.
@@ -279,6 +326,10 @@ module MicroGPT
       else                 MicroGPT.use_crystal!
       end
 
+      if seed = seed_value
+        Random.thread_default.new_seed(seed.to_u64)
+      end
+
       unless File.exists?(filename)
         STDERR.puts "File not found: #{filename}"
         exit 1
@@ -286,6 +337,21 @@ module MicroGPT
 
       text = File.read(filename)
       dataset = CharDataset.new(text)
+
+      if agpt_mode
+        if cooperative
+          STDERR.puts "AGPT MVP currently supports single-model mode only"
+          exit 1
+        end
+        if compare
+          STDERR.puts "AGPT MVP does not support compare mode yet"
+          exit 1
+        end
+        if lookahead != 0
+          STDERR.puts "AGPT MVP does not support lookahead/future mode yet"
+          exit 1
+        end
+      end
 
       # === Cooperative mode: μGPT ensemble with shared stream ===
       if coop_str = cooperative
@@ -644,7 +710,7 @@ module MicroGPT
       end
 
       # Auto-derive model save path from input filename
-      save_path = model_path || filename.sub(/\.[^.]+$/, "") + ".model"
+      save_path = model_path || filename.sub(/\.[^.]+$/, "") + (agpt_mode ? ".agpt.model" : ".model")
 
       # Load existing checkpoint if present
       if File.exists?(save_path)
@@ -656,22 +722,102 @@ module MicroGPT
         end
       end
 
-      puts "MiniGPT ready."
-      puts "  Vocab: #{dataset.vocab_size} chars"
-      puts "  Params: #{active_params}"
-      puts "  Config: d_model=#{config.d_model} n_layers=#{config.n_layers} d_ff=#{config.d_ff} seq_len=#{config.seq_len} lr=#{config.learning_rate}"
-      puts "  Backend: #{backend}"
-      puts "  Lookahead: #{lookahead}" if lookahead > 0
-      puts "  Mode: future (causal + anti-causal)" if lookahead == -1
-      puts "  Model: #{save_path}"
-      puts
+      agpt_trainer = nil
+      if agpt_mode
+        trie_source = "built"
+        trie_index_path = agpt_load_index || agpt_save_index
+        corpus_hash = AGPT::TrieCorpus.token_hash(dataset.data)
+        if index_path = agpt_load_index
+          begin
+            build_started_at = Time.instant
+            trie = AGPT::TrieCorpus.load(index_path)
+            trie_build_time = Time.instant - build_started_at
+            trie.validate_metadata!(
+              corpus_token_count: dataset.data.size,
+              vocab_size: dataset.vocab_size,
+              corpus_hash: corpus_hash,
+              tokenizer_tag: AGPT_TOKENIZER_TAG,
+              max_depth: config.seq_len
+            )
+          rescue ex
+            STDERR.puts "AGPT index error: #{ex.message}"
+            exit 1
+          end
+          trie_source = "loaded"
+        else
+          max_starts = agpt_max_starts > 0 ? agpt_max_starts : nil
+          build_started_at = Time.instant
+          trie = AGPT::TrieCorpus.from_token_ids(
+            dataset.data,
+            max_depth: config.seq_len,
+            max_starts: max_starts,
+            start_offset: agpt_start_offset,
+            progress_interval: agpt_progress,
+            vocab_size: dataset.vocab_size,
+            corpus_hash: corpus_hash,
+            tokenizer_tag: AGPT_TOKENIZER_TAG
+          )
+          trie_build_time = Time.instant - build_started_at
+
+          if index_path = agpt_save_index
+            save_started_at = Time.instant
+            trie.save(index_path)
+            trie_save_time = Time.instant - save_started_at
+            STDERR.puts "[agpt index] saved #{index_path} in #{trie_save_time.total_milliseconds.round(1)} ms"
+          end
+        end
+
+        agpt_trainer = AGPT::Trainer.new(trie)
+        trie_shape = trie.shape_stats
+        puts "MiniGPT ready."
+        puts "  Mode: AGPT replay-prefix"
+        puts "  Vocab: #{dataset.vocab_size} chars"
+        puts "  Params: #{active_params}"
+        puts "  Config: d_model=#{config.d_model} n_layers=#{config.n_layers} d_ff=#{config.d_ff} seq_len=#{config.seq_len} lr=#{config.learning_rate}"
+        puts "  Backend: #{backend}"
+        puts "  Corpus tokens: #{dataset.data.size}"
+        puts "  AGPT max depth: #{trie.max_depth || "full"}"
+        puts "  Trie starts used: #{trie.starts_used} / #{dataset.data.size - 1}"
+        puts "  Start offset: #{agpt_start_offset}"
+        puts "  Trie nodes: #{trie.node_count}"
+        puts "  Prefix examples: #{agpt_trainer.example_count}"
+        puts "  Trie source: #{trie_source}"
+        puts "  Trie index: #{trie_index_path}" if trie_index_path
+        puts "  Trie load: #{trie_build_time.total_milliseconds.round(1)} ms" if trie_source == "loaded"
+        puts "  Trie build: #{trie_build_time.total_milliseconds.round(1)} ms" if trie_source == "built"
+        puts "  Trie shape: root=#{trie_shape.root_children} leaves=#{trie_shape.leaves} unary=#{trie_shape.unary_nodes} branching=#{trie_shape.branching_nodes}"
+        puts "  Trie breadth: peak=#{trie_shape.peak_width} at depth #{trie_shape.peak_width_depth} max_children=#{trie_shape.max_children} avg_internal=#{trie_shape.avg_children_per_internal.round(2)}"
+        puts "  Model: #{save_path}"
+        puts
+
+        next if build_only
+      else
+        puts "MiniGPT ready."
+        puts "  Vocab: #{dataset.vocab_size} chars"
+        puts "  Params: #{active_params}"
+        puts "  Config: d_model=#{config.d_model} n_layers=#{config.n_layers} d_ff=#{config.d_ff} seq_len=#{config.seq_len} lr=#{config.learning_rate}"
+        puts "  Backend: #{backend}"
+        puts "  Lookahead: #{lookahead}" if lookahead > 0
+        puts "  Mode: future (causal + anti-causal)" if lookahead == -1
+        puts "  Model: #{save_path}"
+        puts
+
+        next if build_only
+      end
 
       avg_loss = 0.0
       avg_causal_loss = 0.0
       avg_future_loss = 0.0
       avg_head_losses = Array(Float64).new((lookahead > 0 ? lookahead : 0) + 1, 0.0)
       steps.times do |step|
-        if fm = future_model
+        if trainer = agpt_trainer
+          loss, example = trainer.train_step(model)
+          input = if example.prefix_tokens.size > 16
+            example.prefix_tokens[-16..]
+          else
+            example.prefix_tokens
+          end
+        elsif fm = future_model
           input, targets = dataset.sample(config.seq_len, 0)
           loss, causal_loss, future_loss = fm.train_step(input, targets[0])
           avg_causal_loss = step == 0 ? causal_loss : 0.99 * avg_causal_loss + 0.01 * causal_loss
@@ -695,10 +841,13 @@ module MicroGPT
             " [causal=#{"%.4f" % avg_causal_loss}, future=#{"%.4f" % avg_future_loss}]"
           elsif lookahead > 0
             " [" + avg_head_losses.map_with_index { |l, i| "W#{i}=#{"%.4f" % l}" }.join(", ") + "]"
+          elsif agpt_mode
+            " [agpt]"
           else
             ""
           end
-          puts "Step #{step}/#{steps} (epoch #{dataset.epoch}): loss = #{"%.4f" % loss} avg = #{"%.4f" % avg_loss}#{head_str}"
+          step_label = agpt_mode ? "prefix_step" : "epoch #{dataset.epoch}"
+          puts "Step #{step}/#{steps} (#{step_label}): loss = #{"%.4f" % loss} avg = #{"%.4f" % avg_loss}#{head_str}"
           seed = input[0, 16]
           gen_model = future_model || la_model
           generated = gen_model ? gen_model.generate(seed, 100, temperature: 0.8) : model.generate(seed, 100, temperature: 0.8)
@@ -722,6 +871,7 @@ module MicroGPT
         # Log result
         rid_str = run_id || "d#{config.d_model}n#{config.n_layers}"
         extra = "d_model=#{config.d_model} n_layers=#{config.n_layers} d_ff=#{config.d_ff}"
+        extra += " mode=agpt" if agpt_mode
         log_result(rid_str, active_params, steps, avg_loss, extra, filename)
       end
       puts
