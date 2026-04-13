@@ -761,6 +761,149 @@ extern "C" void cuda_adam_bulk(float* params, float* grads,
 }
 
 // =============================================================================
+// Batched Variable-Length Attention (for AGPT trie-walk)
+// =============================================================================
+// Processes all nodes at a depth level in ONE kernel launch.
+// Each block handles one (node, head) pair.
+//
+// Layout:
+//   q_packed:   [N * n_heads, head_dim]  — Q vectors, row (node*n_heads + head)
+//   k_packed:   [total_kv_entries, head_dim]  — all K entries packed contiguously
+//   v_packed:   [total_kv_entries, head_dim]  — all V entries packed contiguously
+//   kv_offsets: [N]  — starting index into k/v_packed for each node
+//   kv_lengths: [N]  — number of KV entries for each node (prefix_len)
+//   output:     [N * n_heads, head_dim]  — attention output per (node, head)
+//   weights_out:[N * max_len]  — flattened attention weights (optional, for backward)
+
+__global__ void batched_varlen_attn_kernel(
+    const float* q_packed,     // [N * n_heads, head_dim]
+    const float* k_packed,     // [total_kv, head_dim]
+    const float* v_packed,     // [total_kv, head_dim]
+    const int*   kv_offsets,   // [N]
+    const int*   kv_lengths,   // [N]
+    float*       output,       // [N * n_heads, head_dim]
+    float*       weights_out,  // [N * n_heads * max_len] or NULL
+    int n_nodes,
+    int n_heads,
+    int head_dim,
+    int max_len,
+    float scale
+) {
+    int block_id = blockIdx.x;
+    int node = block_id / n_heads;
+    int head = block_id % n_heads;
+    int tid = threadIdx.x;
+    int nthreads = blockDim.x;
+
+    if (node >= n_nodes) return;
+
+    int prefix_len = kv_lengths[node];
+    int kv_off = kv_offsets[node];
+    // K/V are packed as [kv_off * n_heads * head_dim + head * head_dim] per position
+    // Layout within packed: for each position p, heads are interleaved:
+    //   k_packed[(kv_off + p) * n_heads * head_dim + head * head_dim + j]
+
+    int q_row = node * n_heads + head;
+    const float* q = q_packed + q_row * head_dim;
+    float* out = output + q_row * head_dim;
+
+    extern __shared__ float sdata[];
+    // sdata layout: [max_len] for scores, [nthreads] for reduction
+
+    // Compute scores: q · k[p] for each position p
+    float* scores = sdata;
+    float* reduce_buf = sdata + max_len;
+
+    for (int p = tid; p < prefix_len; p += nthreads) {
+        const float* k_p = k_packed + ((kv_off + p) * n_heads + head) * head_dim;
+        float dot = 0.0f;
+        for (int j = 0; j < head_dim; j++) {
+            dot += q[j] * k_p[j];
+        }
+        scores[p] = dot * scale;
+    }
+    __syncthreads();
+
+    // Softmax over scores[0..prefix_len-1]
+    // Find max
+    float local_max = -FLT_MAX;
+    for (int p = tid; p < prefix_len; p += nthreads) {
+        if (scores[p] > local_max) local_max = scores[p];
+    }
+    reduce_buf[tid] = local_max;
+    __syncthreads();
+    for (int s = nthreads / 2; s > 0; s >>= 1) {
+        if (tid < s && reduce_buf[tid + s] > reduce_buf[tid])
+            reduce_buf[tid] = reduce_buf[tid + s];
+        __syncthreads();
+    }
+    float max_val = reduce_buf[0];
+
+    // Exp and sum
+    float local_sum = 0.0f;
+    for (int p = tid; p < prefix_len; p += nthreads) {
+        float e = expf(scores[p] - max_val);
+        scores[p] = e;
+        local_sum += e;
+    }
+    reduce_buf[tid] = local_sum;
+    __syncthreads();
+    for (int s = nthreads / 2; s > 0; s >>= 1) {
+        if (tid < s) reduce_buf[tid] += reduce_buf[tid + s];
+        __syncthreads();
+    }
+    float inv_sum = 1.0f / reduce_buf[0];
+
+    // Normalize weights
+    for (int p = tid; p < prefix_len; p += nthreads) {
+        scores[p] *= inv_sum;
+    }
+    __syncthreads();
+
+    // Store weights if requested (for backward)
+    if (weights_out != NULL) {
+        int w_off = (node * n_heads + head) * max_len;
+        for (int p = tid; p < prefix_len; p += nthreads) {
+            weights_out[w_off + p] = scores[p];
+        }
+    }
+
+    // Weighted sum: output = sum_p weights[p] * v[p]
+    for (int j = tid; j < head_dim; j += nthreads) {
+        float acc = 0.0f;
+        for (int p = 0; p < prefix_len; p++) {
+            const float* v_p = v_packed + ((kv_off + p) * n_heads + head) * head_dim;
+            acc += scores[p] * v_p[j];
+        }
+        out[j] = acc;
+    }
+}
+
+extern "C" void cuda_batched_varlen_attention(
+    const float* q_packed,
+    const float* k_packed,
+    const float* v_packed,
+    const int*   kv_offsets,
+    const int*   kv_lengths,
+    float*       output,
+    float*       weights_out,
+    int n_nodes,
+    int n_heads,
+    int head_dim,
+    int max_len,
+    float scale
+) {
+    int blocks = n_nodes * n_heads;
+    int threads = (head_dim < 128) ? 32 : 128;
+    // shared memory: max_len floats for scores + threads floats for reduction
+    int smem = (max_len + threads) * sizeof(float);
+    batched_varlen_attn_kernel<<<blocks, threads, smem>>>(
+        q_packed, k_packed, v_packed, kv_offsets, kv_lengths,
+        output, weights_out, n_nodes, n_heads, head_dim, max_len, scale
+    );
+}
+
+// =============================================================================
 // Synchronize
 // =============================================================================
 

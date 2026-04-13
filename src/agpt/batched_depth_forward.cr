@@ -121,36 +121,17 @@ module MicroGPT
           end
 
           # --- Per-node attention (different KV histories) ---
-          # Each node attends to its own prefix. When parent_caches are available,
-          # we extend the parent's cache by one entry instead of reconstructing
-          # from scratch — O(1) per node instead of O(depth).
+          # Store each node's K/V contribution first, then compute attention.
+          # On GPU: pack Q + KV into contiguous buffers, one kernel launch.
+          # On CPU: per-node loop with incremental parent caches.
+
           attn_outputs = Mat.new(n, d_model)
           per_node_attn_weights = Array(Array(Mat)).new(n)
 
+          # First: extract and store each node's K/V from batched projections
+          node_k_rows = Array(Array(Mat)).new(n)
+          node_v_rows = Array(Array(Mat)).new(n)
           n.times do |i|
-            GC.collect if i > 0 && i % 500 == 0  # free temporary KV slices
-
-            node_id = nodes[i].id
-            parent_id = nodes[i].parent.not_nil!.id
-
-            # Fast path: extend parent's cache if available
-            layer_cache = if pc = parent_caches
-              if parent_layer_caches = pc[parent_id]?
-                parent_lc = parent_layer_caches[li]
-                # Unary: reuse parent cache directly; branching: copy first
-                if nodes[i].parent.not_nil!.children.size > 1
-                  parent_lc.deep_clone
-                else
-                  parent_lc
-                end
-              else
-                kv_store.reconstruct_layer_cache(node_id, corpus, li, head_dims, seq_len)
-              end
-            else
-              kv_store.reconstruct_layer_cache(node_id, corpus, li, head_dims, seq_len)
-            end
-
-            # Extract this node's K/V from the batched projection
             k_row_parts = Array(Mat).new(n_heads)
             v_row_parts = Array(Mat).new(n_heads)
             n_heads.times do |hi|
@@ -164,39 +145,27 @@ module MicroGPT
               k_row_parts << k_row
               v_row_parts << v_row
             end
+            node_k_rows << k_row_parts
+            node_v_rows << v_row_parts
+            kv_store.store_layer(nodes[i].id, li, k_row_parts, v_row_parts)
+          end
 
-            # Extend cache with this node's K/V
-            layer_cache.extend(k_row_parts, v_row_parts)
-
-            # Per-head attention
-            head_attn_weights = Array(Mat).new(n_heads)
-            col_offset = 0
-            n_heads.times do |hi|
-              hd = head_dims[hi]
-
-              q_h = Mat.new(1, hd)
-              hd.times { |j| q_h[0, j] = q_parts[hi][i, j] }
-
-              k_full = layer_cache.k_slice(hi)  # [prefix_len, hd]
-              v_full = layer_cache.v_slice(hi)  # [prefix_len, hd]
-
-              scale = (1.0 / Math.sqrt(hd.to_f64)).to_f32
-              scores = q_h * k_full.t  # [1, prefix_len]
-              scores.scale!(scale)
-              weights = MicroGPT.backend.softmax_rows(scores)
-              out = weights * v_full  # [1, hd]
-
-              head_attn_weights << copy_mat(weights)
-
-              hd.times { |j| attn_outputs[i, col_offset + j] = out[0, j] }
-              col_offset += hd
-            end
-
-            per_node_attn_weights << head_attn_weights
-            this_depth_caches[node_id] << layer_cache
-
-            # Store this node's K/V for this layer
-            kv_store.store_layer(node_id, li, k_row_parts, v_row_parts)
+          if MicroGPT.backend.is_a?(MicroGPT::CuBLASBackend)
+            # GPU path: pack all Q/KV, one kernel launch for all nodes
+            gpu_batched_attention(
+              nodes, n, li, head_dims, n_heads, d_model, seq_len,
+              q_parts, node_k_rows, node_v_rows,
+              kv_store, corpus, attn_outputs, per_node_attn_weights,
+              this_depth_caches
+            )
+          else
+            # CPU path: per-node with incremental parent caches
+            cpu_per_node_attention(
+              nodes, n, li, head_dims, n_heads, d_model, seq_len,
+              q_parts, node_k_rows, node_v_rows,
+              kv_store, corpus, parent_caches,
+              attn_outputs, per_node_attn_weights, this_depth_caches
+            )
           end
 
           # Batched WO: [N, d_model] × W_o → [N, d_model]
@@ -307,6 +276,216 @@ module MicroGPT
           m.cols.times { |c| result[r, c] = m[r, c] }
         end
         result
+      end
+
+      # GPU path: pack Q + KV into flat arrays, one CUDA kernel call.
+      private def gpu_batched_attention(
+        nodes, n, li, head_dims, n_heads, d_model, seq_len,
+        q_parts, node_k_rows, node_v_rows,
+        kv_store, corpus, attn_outputs, per_node_attn_weights,
+        this_depth_caches
+      )
+        hd = head_dims[0]  # assumes uniform heads for GPU path
+
+        # Compute prefix lengths and max_len
+        prefix_lens = Array(Int32).new(n)
+        n.times do |i|
+          # depth of this node = number of ancestors (excl root) + self
+          prefix_lens << nodes[i].depth
+        end
+        max_len = prefix_lens.max
+
+        # Pack Q: [N * n_heads, hd] — interleaved by head
+        q_flat = Array(Float32).new(n * n_heads * hd, 0.0_f32)
+        n.times do |i|
+          n_heads.times do |hi|
+            base = (i * n_heads + hi) * hd
+            hd.times { |j| q_flat[base + j] = q_parts[hi][i, j] }
+          end
+        end
+
+        # Pack KV: for each node, collect ancestor K/V entries + own entry
+        # Layout: position p of node i at kv_offset[i]+p, heads interleaved
+        # Entry stride: n_heads * hd
+        kv_offsets = Array(Int32).new(n, 0)
+        total_kv = 0
+        n.times do |i|
+          kv_offsets[i] = total_kv
+          total_kv += prefix_lens[i]
+        end
+
+        k_flat = Array(Float32).new(total_kv * n_heads * hd, 0.0_f32)
+        v_flat = Array(Float32).new(total_kv * n_heads * hd, 0.0_f32)
+
+        n.times do |i|
+          node_id = nodes[i].id
+          offset = kv_offsets[i]
+
+          # Walk ancestor chain to collect K/V per position
+          chain = [] of Int32
+          current = node_id
+          while current != -1
+            chain << current
+            current = corpus.parent_id(current)
+          end
+          chain.reverse!
+          # chain[0] = root (no KV), chain[1..] = ancestors + self
+
+          pos = 0
+          (1...chain.size).each do |ci|
+            anc_id = chain[ci]
+            entry = kv_store.entries[anc_id]?
+            next unless entry
+            layer_entry = entry[li]?
+            next unless layer_entry
+            n_heads.times do |hi|
+              k_row, v_row = layer_entry[hi]
+              base = (offset + pos) * n_heads * hd + hi * hd
+              hd.times do |j|
+                k_flat[base + j] = k_row[0, j]
+                v_flat[base + j] = v_row[0, j]
+              end
+            end
+            pos += 1
+          end
+        end
+
+        # Allocate GPU buffers and copy
+        q_gpu = gpu_alloc_copy(q_flat)
+        k_gpu = gpu_alloc_copy(k_flat)
+        v_gpu = gpu_alloc_copy(v_flat)
+        offsets_gpu = gpu_alloc_copy_int(kv_offsets)
+        lengths_gpu = gpu_alloc_copy_int(prefix_lens)
+        out_size = n * n_heads * hd
+        out_gpu = gpu_alloc(out_size)
+        weights_size = n * n_heads * max_len
+        weights_gpu = gpu_alloc(weights_size)
+
+        scale = (1.0 / Math.sqrt(hd.to_f64)).to_f32
+
+        LibCUDAKernels.cuda_batched_varlen_attention(
+          q_gpu, k_gpu, v_gpu, offsets_gpu, lengths_gpu,
+          out_gpu, weights_gpu,
+          n, n_heads, hd, max_len, scale
+        )
+        LibCUDAKernels.cuda_sync
+
+        # Read back results
+        out_host = Array(Float32).new(out_size, 0.0_f32)
+        LibCUDA.cudaMemcpy(out_host.to_unsafe.as(Void*), out_gpu.as(Void*),
+                           out_size.to_u64 * sizeof(Float32), 2) # cudaMemcpyDeviceToHost=2
+
+        weights_host = Array(Float32).new(weights_size, 0.0_f32)
+        LibCUDA.cudaMemcpy(weights_host.to_unsafe.as(Void*), weights_gpu.as(Void*),
+                           weights_size.to_u64 * sizeof(Float32), 2)
+
+        # Unpack attention outputs into attn_outputs [N, d_model]
+        n.times do |i|
+          col_offset = 0
+          head_weights = Array(Mat).new(n_heads)
+          n_heads.times do |hi|
+            base = (i * n_heads + hi) * hd
+            hd.times { |j| attn_outputs[i, col_offset + j] = out_host[base + j] }
+            col_offset += hd
+
+            # Unpack weights for backward
+            w = Mat.new(1, prefix_lens[i])
+            w_base = (i * n_heads + hi) * max_len
+            prefix_lens[i].times { |p| w[0, p] = weights_host[w_base + p] }
+            head_weights << w
+          end
+          per_node_attn_weights << head_weights
+
+          # Build a dummy layer cache for parent cache propagation
+          # (reconstruct from kv_store for the next depth's parent_caches)
+          lc = kv_store.reconstruct_layer_cache(nodes[i].id, corpus, li, head_dims, seq_len)
+          lc.extend(node_k_rows[i], node_v_rows[i])
+          this_depth_caches[nodes[i].id] << lc
+        end
+
+        # Free GPU buffers
+        gpu_free(q_gpu); gpu_free(k_gpu); gpu_free(v_gpu)
+        gpu_free(offsets_gpu.as(Float32*)); gpu_free(lengths_gpu.as(Float32*))
+        gpu_free(out_gpu); gpu_free(weights_gpu)
+      end
+
+      # CPU path: per-node attention with incremental parent caches
+      private def cpu_per_node_attention(
+        nodes, n, li, head_dims, n_heads, d_model, seq_len,
+        q_parts, node_k_rows, node_v_rows,
+        kv_store, corpus, parent_caches,
+        attn_outputs, per_node_attn_weights, this_depth_caches
+      )
+        n.times do |i|
+          GC.collect if i > 0 && i % 500 == 0
+
+          node_id = nodes[i].id
+          parent_id = nodes[i].parent.not_nil!.id
+
+          layer_cache = if pc = parent_caches
+            if parent_layer_caches = pc[parent_id]?
+              parent_lc = parent_layer_caches[li]
+              if nodes[i].parent.not_nil!.children.size > 1
+                parent_lc.deep_clone
+              else
+                parent_lc
+              end
+            else
+              kv_store.reconstruct_layer_cache(node_id, corpus, li, head_dims, seq_len)
+            end
+          else
+            kv_store.reconstruct_layer_cache(node_id, corpus, li, head_dims, seq_len)
+          end
+
+          layer_cache.extend(node_k_rows[i], node_v_rows[i])
+
+          head_attn_weights = Array(Mat).new(n_heads)
+          col_offset = 0
+          n_heads.times do |hi|
+            hd = head_dims[hi]
+            q_h = Mat.new(1, hd)
+            hd.times { |j| q_h[0, j] = q_parts[hi][i, j] }
+            k_full = layer_cache.k_slice(hi)
+            v_full = layer_cache.v_slice(hi)
+            scale = (1.0 / Math.sqrt(hd.to_f64)).to_f32
+            scores = q_h * k_full.t
+            scores.scale!(scale)
+            weights = MicroGPT.backend.softmax_rows(scores)
+            out = weights * v_full
+            head_attn_weights << copy_mat(weights)
+            hd.times { |j| attn_outputs[i, col_offset + j] = out[0, j] }
+            col_offset += hd
+          end
+
+          per_node_attn_weights << head_attn_weights
+          this_depth_caches[node_id] << layer_cache
+        end
+      end
+
+      private def gpu_alloc_copy(data : Array(Float32)) : Float32*
+        ptr = Pointer(Void).null
+        LibCUDA.cudaMalloc(pointerof(ptr), data.size.to_u64 * sizeof(Float32))
+        LibCUDA.cudaMemcpy(ptr, data.to_unsafe.as(Void*),
+                           data.size.to_u64 * sizeof(Float32), 1) # cudaMemcpyHostToDevice=1
+        ptr.as(Float32*)
+      end
+
+      private def gpu_alloc_copy_int(data : Array(Int32)) : Int32*
+        ptr = Pointer(Void).null
+        LibCUDA.cudaMalloc(pointerof(ptr), data.size.to_u64 * sizeof(Int32))
+        LibCUDA.cudaMemcpy(ptr, data.to_unsafe.as(Void*),
+                           data.size.to_u64 * sizeof(Int32), 1)
+        ptr.as(Int32*)
+      end
+
+      private def gpu_alloc(n : Int32) : Float32*
+        ptr = Pointer(Void).null
+        LibCUDA.cudaMalloc(pointerof(ptr), n.to_u64 * sizeof(Float32))
+        ptr.as(Float32*)
+      end
+
+      private def gpu_free(ptr : Float32*)
+        LibCUDA.cudaFree(ptr.as(Void*))
       end
 
       private def apply_rope_row!(m : Mat, row : Int32, rope : RoPE, position : Int32)

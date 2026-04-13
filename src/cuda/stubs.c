@@ -33,4 +33,9 @@ void cuda_fused_bias_relu(const float* input, const float* bias,
 void cuda_adam_bulk(float* params, float* grads, float* m, float* v,
                      float lr, float beta1, float beta2, float eps,
                      int t, int n) {}
+void cuda_batched_varlen_attention(
+    const float* q_packed, const float* k_packed, const float* v_packed,
+    const int* kv_offsets, const int* kv_lengths,
+    float* output, float* weights_out,
+    int n_nodes, int n_heads, int head_dim, int max_len, float scale) {}
 void cuda_sync() {}

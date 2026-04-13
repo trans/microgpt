@@ -552,6 +552,12 @@ lib LibCUDAKernels
   fun cuda_adam_bulk(params : Float32*, grads : Float32*, m : Float32*, v : Float32*,
                      lr : Float32, beta1 : Float32, beta2 : Float32, eps : Float32,
                      t : Int32, n : Int32)
+  fun cuda_batched_varlen_attention(
+    q_packed : Float32*, k_packed : Float32*, v_packed : Float32*,
+    kv_offsets : Int32*, kv_lengths : Int32*,
+    output : Float32*, weights_out : Float32*,
+    n_nodes : Int32, n_heads : Int32, head_dim : Int32,
+    max_len : Int32, scale : Float32)
   fun cuda_sync
 end
 
