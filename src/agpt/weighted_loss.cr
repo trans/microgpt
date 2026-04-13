@@ -11,17 +11,24 @@ module MicroGPT
         raise "WeightedNextTokenLoss requires at least one observed next token" if counts.empty?
 
         probs = MicroGPT.backend.softmax_rows(logits)
+
+        # Force a single bulk CPU download of probs to avoid per-element
+        # sync_to_cpu calls (each probs[0,j] read would trigger a sync).
+        probs_data = probs.data  # triggers one sync, returns CPU array
+        vocab_size = logits.cols
+
         total = counts.values.sum(0)
         loss = 0.0
 
         counts.each do |token_id, count|
-          loss -= count * Math.log(probs[0, token_id] + 1e-10)
+          loss -= count * Math.log(probs_data[token_id] + 1e-10)
         end
         loss /= total
 
-        grad = MicroGPT::Mat.new(logits.rows, logits.cols)
-        logits.cols.times do |j|
-          grad[0, j] = probs[0, j]
+        # Build grad on CPU directly from the downloaded probs
+        grad = MicroGPT::Mat.new(1, vocab_size)
+        vocab_size.times do |j|
+          grad[0, j] = probs_data[j]
         end
         counts.each do |token_id, count|
           grad[0, token_id] -= count.to_f32 / total

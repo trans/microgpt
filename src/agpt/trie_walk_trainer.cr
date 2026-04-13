@@ -91,18 +91,49 @@ module MicroGPT
           MicroGPT::PerfTrace.observe_max("agpt.forward_stage_bytes", Mat.allocated_bytes)
           MicroGPT::PerfTrace.add_time("agpt.epoch.forward", Time.instant - forward_started.not_nil!) if forward_started
 
-          # Compute loss and build result index
+          # Compute loss: batch softmax across all nodes, download once, then
+          # compute per-node weighted CE loss and gradient on CPU.
           loss_started = Time.instant if MicroGPT::PerfTrace.enabled?
           loss_grads = {} of Int32 => Mat
           result_map = {} of Int32 => BatchedDepthForward::NodeResult
           MicroGPT::PerfTrace.with_scope("agpt.loss") do
-            results.each do |result|
+            n_results = results.size
+            vocab_size = model.config.vocab_size
+
+            # Stack all logits into [N, vocab] and batch softmax (one GPU op)
+            logits_batched = Mat.new(n_results, vocab_size)
+            n_results.times do |i|
+              vocab_size.times { |j| logits_batched[i, j] = results[i].logits[0, j] }
+            end
+            probs_batched = MicroGPT.backend.softmax_rows(logits_batched)
+
+            # Single bulk download of all probs to CPU
+            all_probs = probs_batched.data  # one sync for all N×vocab
+
+            # Per-node loss and gradient from downloaded probs
+            results.each_with_index do |result, i|
               result_map[result.node_id] = result
               node = @corpus.node_for_id(result.node_id)
               unless node.next_token_counts.empty?
                 counts = node.next_token_counts_hash
-                loss_value, d_logits = @loss_fn.loss_and_backward(result.logits, counts)
-                loss_grads[result.node_id] = d_logits
+                total = counts.values.sum(0)
+
+                # Loss from CPU probs
+                loss_value = 0.0
+                prob_offset = i * vocab_size
+                counts.each do |token_id, count|
+                  loss_value -= count * Math.log(all_probs[prob_offset + token_id] + 1e-10)
+                end
+                loss_value /= total
+
+                # Gradient: probs - one-hot(weighted)
+                grad = Mat.new(1, vocab_size)
+                vocab_size.times { |j| grad[0, j] = all_probs[prob_offset + j] }
+                counts.each do |token_id, count|
+                  grad[0, token_id] -= count.to_f32 / total
+                end
+
+                loss_grads[result.node_id] = grad
                 total_loss += loss_value
                 nodes_trained += 1
               end

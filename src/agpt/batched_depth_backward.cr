@@ -433,6 +433,19 @@ module MicroGPT
         grad : Mat, normed : Mat, std_inv : Mat,
         gamma : Mat, dgamma : Mat, dbeta : Mat
       ) : Mat
+        if MicroGPT.backend.is_a?(MicroGPT::CuBLASBackend)
+          dx = nil.as(Mat?)
+          trace_sync_delta("agpt.backward.batched_ln_backward") do
+            dx_tmp, dgamma_tmp, dbeta_tmp = MicroGPT.backend.layer_norm_backward(
+              grad, normed, std_inv, gamma
+            )
+            dgamma.add!(dgamma_tmp)
+            dbeta.add!(dbeta_tmp)
+            dx = dx_tmp
+          end
+          return dx.not_nil!
+        end
+
         n = grad.rows
         d = grad.cols
         dx = Mat.new(n, d)
