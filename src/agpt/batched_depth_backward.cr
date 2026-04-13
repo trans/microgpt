@@ -28,59 +28,72 @@ module MicroGPT
         corpus : TrieCorpus,
         forward_caches : Hash(Int32, Array(LayerKVCache))? = nil
       )
-        return if results.empty?
+        MicroGPT::PerfTrace.with_scope("agpt.backward") do
+          return if results.empty?
 
-        n = results.size
-        d_model = model.config.d_model
-        vocab_size = model.config.vocab_size
-        head_dims = model.blocks.first.attn.head_dims
-        n_layers = model.config.n_layers
-        n_heads = head_dims.size
-        seq_len = model.config.seq_len
+          n = results.size
+          d_model = model.config.d_model
+          vocab_size = model.config.vocab_size
+          head_dims = model.blocks.first.attn.head_dims
+          n_layers = model.config.n_layers
+          n_heads = head_dims.size
+          seq_len = model.config.seq_len
 
-        # --- Batched output projection backward ---
-        # Stack d_logits into [N, vocab_size]
-        d_logits_batched = Mat.new(n, vocab_size)
-        n.times do |i|
-          vocab_size.times { |j| d_logits_batched[i, j] = loss_grads[i][0, j] }
-        end
+          # --- Batched output projection backward ---
+          output_started = Time.instant if MicroGPT::PerfTrace.enabled?
+          # Stack d_logits into [N, vocab_size]
+          d_logits_batched = Mat.new(n, vocab_size)
+          trace_sync_delta("agpt.backward.output_stack") do
+            n.times do |i|
+              vocab_size.times { |j| d_logits_batched[i, j] = loss_grads[i][0, j] }
+            end
+          end
 
-        # Stack final_norm_out into [N, d_model] (input to output projection)
-        final_norm_out_batched = Mat.new(n, d_model)
-        n.times do |i|
-          d_model.times { |j| final_norm_out_batched[i, j] = results[i].final_norm_out[0, j] }
-        end
+          # Stack final_norm_out into [N, d_model] (input to output projection)
+          final_norm_out_batched = Mat.new(n, d_model)
+          trace_sync_delta("agpt.backward.output_norm_out") do
+            n.times do |i|
+              d_model.times { |j| final_norm_out_batched[i, j] = results[i].final_norm_out[0, j] }
+            end
+          end
 
-        # dW_proj += final_norm_out^T × d_logits  [d_model, vocab_size]
-        proj = model.output.proj
-        proj.dw.add!(final_norm_out_batched.t * d_logits_batched)
-        # db_proj += sum of d_logits rows
-        n.times do |i|
-          vocab_size.times { |j| proj.db[0, j] += d_logits_batched[i, j] }
-        end
+          # dW_proj += final_norm_out^T × d_logits  [d_model, vocab_size]
+          proj = model.output.proj
+          proj.dw.add!(final_norm_out_batched.t * d_logits_batched)
+          # db_proj += sum of d_logits rows
+          n.times do |i|
+            vocab_size.times { |j| proj.db[0, j] += d_logits_batched[i, j] }
+          end
 
-        # d_hidden = d_logits × W_proj^T  [N, d_model]
-        d_hidden = d_logits_batched * proj.w.t
+          # d_hidden = d_logits × W_proj^T  [N, d_model]
+          d_hidden = d_logits_batched * proj.w.t
+          MicroGPT::PerfTrace.add_time("agpt.backward.output", Time.instant - output_started.not_nil!) if output_started
 
-        # --- Batched final norm backward ---
-        final_normed_batched = Mat.new(n, d_model)
-        final_std_inv_batched = Mat.new(n, 1)
-        n.times do |i|
-          d_model.times { |j| final_normed_batched[i, j] = results[i].final_normed[0, j] }
-          final_std_inv_batched[i, 0] = results[i].final_std_inv.to_f32
-        end
+          # --- Batched final norm backward ---
+          final_norm_started = Time.instant if MicroGPT::PerfTrace.enabled?
+          final_normed_batched = Mat.new(n, d_model)
+          final_std_inv_batched = Mat.new(n, 1)
+          trace_sync_delta("agpt.backward.final_norm_prep") do
+            n.times do |i|
+              d_model.times { |j| final_normed_batched[i, j] = results[i].final_normed[0, j] }
+              final_std_inv_batched[i, 0] = results[i].final_std_inv.to_f32
+            end
+          end
 
-        d_hidden = batched_ln_backward(
-          d_hidden, final_normed_batched, final_std_inv_batched,
-          model.final_norm.gamma, model.final_norm.dgamma, model.final_norm.dbeta
-        )
+          d_hidden = batched_ln_backward(
+            d_hidden, final_normed_batched, final_std_inv_batched,
+            model.final_norm.gamma, model.final_norm.dgamma, model.final_norm.dbeta
+          )
+          MicroGPT::PerfTrace.add_time("agpt.backward.final_norm", Time.instant - final_norm_started.not_nil!) if final_norm_started
 
-        # --- Per-block backward (reverse order) ---
-        model.blocks.reverse_each.with_index do |block, rev_idx|
+          # --- Per-block backward (reverse order) ---
+          model.blocks.reverse_each.with_index do |block, rev_idx|
           li = model.blocks.size - 1 - rev_idx
           attn = block.attn
+          block_started = Time.instant if MicroGPT::PerfTrace.enabled?
 
           # Gather per-node block states for this layer into batched matrices
+          gather_started = Time.instant if MicroGPT::PerfTrace.enabled?
           ln2_out_b = Mat.new(n, d_model)
           ln2_norm_b = Mat.new(n, d_model)
           ln2_sinv_b = Mat.new(n, 1)
@@ -91,25 +104,33 @@ module MicroGPT
           ln1_norm_b = Mat.new(n, d_model)
           ln1_sinv_b = Mat.new(n, 1)
 
-          n.times do |i|
-            bs = results[i].block_states[li]
-            d_model.times do |j|
-              ln2_out_b[i, j] = bs.ln2_out[0, j]
-              ln2_norm_b[i, j] = bs.ln2_normed[0, j]
-              wo_input_b[i, j] = bs.wo_input[0, j]
-              ln1_out_b[i, j] = bs.ln1_out[0, j]
-              ln1_norm_b[i, j] = bs.ln1_normed[0, j]
-            end
-            ln2_sinv_b[i, 0] = bs.ln2_std_inv.to_f32
-            ln1_sinv_b[i, 0] = bs.ln1_std_inv.to_f32
-            model.config.d_ff.times do |j|
-              ff_relu_out_b[i, j] = bs.ff_relu_out[0, j]
-              ff_relu_mask_b[i, j] = bs.ff_relu_mask[0, j]
+          trace_sync_delta("agpt.backward.layer#{li}.gather_state") do
+            n.times do |i|
+              bs = results[i].block_states[li]
+              d_model.times do |j|
+                ln2_out_b[i, j] = bs.ln2_out[0, j]
+                ln2_norm_b[i, j] = bs.ln2_normed[0, j]
+                wo_input_b[i, j] = bs.wo_input[0, j]
+                ln1_out_b[i, j] = bs.ln1_out[0, j]
+                ln1_norm_b[i, j] = bs.ln1_normed[0, j]
+              end
+              ln2_sinv_b[i, 0] = bs.ln2_std_inv.to_f32
+              ln1_sinv_b[i, 0] = bs.ln1_std_inv.to_f32
+              model.config.d_ff.times do |j|
+                ff_relu_out_b[i, j] = bs.ff_relu_out[0, j]
+                ff_relu_mask_b[i, j] = bs.ff_relu_mask[0, j]
+              end
             end
           end
+          MicroGPT::PerfTrace.add_time("agpt.backward.layer#{li}.gather_state", Time.instant - gather_started.not_nil!) if gather_started
 
           # --- Residual 2 backward: d_ff_out = d_hidden ---
-          d_ff_out = copy_mat(d_hidden)
+          ffn_started = Time.instant if MicroGPT::PerfTrace.enabled?
+          d_ff_out = nil.as(Mat?)
+          trace_sync_delta("agpt.backward.layer#{li}.residual2_copy") do
+            d_ff_out = copy_mat(d_hidden)
+          end
+          d_ff_out = d_ff_out.not_nil!
 
           # Batched FFN L2 backward: dW += ff_relu_out^T × d_ff_out
           block.ff.l2.dw.add!(ff_relu_out_b.t * d_ff_out)
@@ -117,7 +138,9 @@ module MicroGPT
           d_ff_relu = d_ff_out * block.ff.l2.w.t  # [N, d_ff]
 
           # ReLU backward
-          n.times { |i| model.config.d_ff.times { |j| d_ff_relu[i, j] *= ff_relu_mask_b[i, j] } }
+          trace_sync_delta("agpt.backward.layer#{li}.relu_backward") do
+            n.times { |i| model.config.d_ff.times { |j| d_ff_relu[i, j] *= ff_relu_mask_b[i, j] } }
+          end
 
           # Batched FFN L1 backward: dW += ln2_out^T × d_ff_relu
           block.ff.l1.dw.add!(ln2_out_b.t * d_ff_relu)
@@ -130,9 +153,15 @@ module MicroGPT
             block.ln2.gamma, block.ln2.dgamma, block.ln2.dbeta
           )
           d_hidden.add!(d_ln2)  # residual 2
+          MicroGPT::PerfTrace.add_time("agpt.backward.layer#{li}.ffn_ln2", Time.instant - ffn_started.not_nil!) if ffn_started
 
           # --- Residual 1 backward ---
-          d_attn_proj = copy_mat(d_hidden)
+          attn_started = Time.instant if MicroGPT::PerfTrace.enabled?
+          d_attn_proj = nil.as(Mat?)
+          trace_sync_delta("agpt.backward.layer#{li}.residual1_copy") do
+            d_attn_proj = copy_mat(d_hidden)
+          end
+          d_attn_proj = d_attn_proj.not_nil!
 
           # Batched WO backward: dW += wo_input^T × d_attn_proj
           attn.wo.dw.add!(wo_input_b.t * d_attn_proj)
@@ -140,20 +169,26 @@ module MicroGPT
           d_concat = d_attn_proj * attn.wo.w.t  # [N, d_model]
 
           # Split d_concat by heads: each [N, head_dim]
-          d_head_outs = split_cols(d_concat, head_dims)
+          d_head_outs = nil.as(Array(Mat)?)
+          trace_sync_delta("agpt.backward.layer#{li}.split_heads") do
+            d_head_outs = split_cols(d_concat, head_dims)
+          end
+          d_head_outs = d_head_outs.not_nil!
 
           # --- Per-node attention backward (different KV histories) ---
           dq_all = Mat.new(n, d_model)
           dk_current_all = Mat.new(n, d_model)
           dv_current_all = Mat.new(n, d_model)
+          dq_all_data = dq_all.raw_data
+          dk_current_all_data = dk_current_all.raw_data
+          dv_current_all_data = dv_current_all.raw_data
 
           n.times do |i|
-            GC.collect if i > 0 && i % 500 == 0  # free temporary KV slices
+            GC.collect if i > 0 && i % 500 == 0
 
             result = results[i]
             bs = result.block_states[li]
             position = result.position
-            prefix_len = position + 1
 
             accum = grad_accums[result.node_id]? || NodeGradAccum.new(n_layers, head_dims)
 
@@ -169,64 +204,35 @@ module MicroGPT
               reconstruct_node_layer_cache(result.node_id, li, kv_store, corpus, head_dims, seq_len, n_heads)
             end
 
+            prefix_len = layer_cache.len
             col_offset = 0
             n_heads.times do |hi|
               hd = head_dims[hi]
-              d_out_h = Mat.new(1, hd)
-              hd.times { |j| d_out_h[0, j] = d_head_outs[hi][i, j] }
-
-              w_h = bs.attn_weights[hi]              # [1, prefix_len]
-              q_h = bs.q_parts[hi]                   # [1, head_dim] post-RoPE
-              k_h = layer_cache.k_slice(hi)          # [prefix_len, head_dim]
-              v_h = layer_cache.v_slice(hi)          # [prefix_len, head_dim]
-
-              dv_full = w_h.t * d_out_h              # [prefix_len, head_dim]
-              d_weights = d_out_h * v_h.t            # [1, prefix_len]
-              scale = (1.0 / Math.sqrt(hd.to_f64)).to_f32
-              d_scores = softmax_backward_row(w_h, d_weights)
-              d_scores.scale!(scale)
-              dq_h = d_scores * k_h                  # [1, head_dim]
-              dk_full = d_scores.t * q_h             # [prefix_len, head_dim]
-
-              # Add accumulated dK/dV from descendants at current position
-              last = prefix_len - 1
-              hd.times do |j|
-                dk_full[last, j] += accum.dk[li][hi][0, j]
-                dv_full[last, j] += accum.dv[li][hi][0, j]
-              end
-
-              dk_current = extract_row(dk_full, last)
-              dv_current = extract_row(dv_full, last)
-
-              # Scatter ancestor dK/dV
-              if prefix_len > 1
-                (prefix_len - 1).times do |pos|
-                  ancestor_id = result.ancestor_ids[pos]
-                  acc = grad_accums[ancestor_id]? || begin
-                    a = NodeGradAccum.new(n_layers, head_dims)
-                    grad_accums[ancestor_id] = a
-                    a
-                  end
-                  row_dk = Mat.new(1, hd)
-                  row_dv = Mat.new(1, hd)
-                  hd.times do |j|
-                    row_dk[0, j] = dk_full[pos, j]
-                    row_dv[0, j] = dv_full[pos, j]
-                  end
-                  acc.add_dk(li, hi, row_dk)
-                  acc.add_dv(li, hi, row_dv)
-                end
-              end
-
-              # Inverse RoPE on dQ and dK_current
-              IncrementalForward.apply_inverse_rope_at!(dq_h, attn.ropes[hi], position)
-              IncrementalForward.apply_inverse_rope_at!(dk_current, attn.ropes[hi], position)
+              d_out_data = d_head_outs[hi].raw_data
+              d_out_base = i * hd
+              dq_vals, dk_current_vals, dv_current_vals = optimized_attention_backward_head(
+                position: position,
+                ancestor_ids: result.ancestor_ids,
+                layer: li,
+                head: hi,
+                head_dims: head_dims,
+                n_layers: n_layers,
+                d_out_data: d_out_data,
+                d_out_base: d_out_base,
+                attn_weights: bs.attn_weights[hi],
+                q_part: bs.q_parts[hi],
+                layer_cache: layer_cache,
+                accum: accum,
+                grad_accums: grad_accums,
+                rope: attn.ropes[hi]
+              )
 
               # Write back to batched matrices
+              row_base = i * d_model + col_offset
               hd.times do |j|
-                dq_all[i, col_offset + j] = dq_h[0, j]
-                dk_current_all[i, col_offset + j] = dk_current[0, j]
-                dv_current_all[i, col_offset + j] = dv_current[0, j]
+                dq_all_data[row_base + j] = dq_vals[j]
+                dk_current_all_data[row_base + j] = dk_current_vals[j]
+                dv_current_all_data[row_base + j] = dv_current_vals[j]
               end
               col_offset += hd
             end
@@ -234,16 +240,20 @@ module MicroGPT
             # Free this node's grad accumulator
             grad_accums.delete(result.node_id)
           end
+          MicroGPT::PerfTrace.add_time("agpt.backward.layer#{li}.attention", Time.instant - attn_started.not_nil!) if attn_started
 
           # Batched WQ/WK/WV backward: dW += ln1_out^T × dq/dk/dv
+          proj_started = Time.instant if MicroGPT::PerfTrace.enabled?
           attn.wq.dw.add!(ln1_out_b.t * dq_all)
           attn.wk.dw.add!(ln1_out_b.t * dk_current_all)
           attn.wv.dw.add!(ln1_out_b.t * dv_current_all)
-          n.times do |i|
-            d_model.times do |j|
-              attn.wq.db[0, j] += dq_all[i, j]
-              attn.wk.db[0, j] += dk_current_all[i, j]
-              attn.wv.db[0, j] += dv_current_all[i, j]
+          trace_sync_delta("agpt.backward.layer#{li}.qkv_bias") do
+            n.times do |i|
+              d_model.times do |j|
+                attn.wq.db[0, j] += dq_all[i, j]
+                attn.wk.db[0, j] += dk_current_all[i, j]
+                attn.wv.db[0, j] += dv_current_all[i, j]
+              end
             end
           end
 
@@ -258,12 +268,19 @@ module MicroGPT
             block.ln1.gamma, block.ln1.dgamma, block.ln1.dbeta
           )
           d_hidden.add!(d_ln1)  # residual 1
-        end
+          MicroGPT::PerfTrace.add_time("agpt.backward.layer#{li}.qkv_ln1", Time.instant - proj_started.not_nil!) if proj_started
+          MicroGPT::PerfTrace.add_time("agpt.backward.layer#{li}.total", Time.instant - block_started.not_nil!) if block_started
+          end
 
-        # --- Batched embedding gradient ---
-        n.times do |i|
-          token = results[i].token_id
-          d_model.times { |j| model.embedding.d_token_emb[token, j] += d_hidden[i, j] }
+          # --- Batched embedding gradient ---
+          embedding_started = Time.instant if MicroGPT::PerfTrace.enabled?
+          trace_sync_delta("agpt.backward.embedding") do
+            n.times do |i|
+              token = results[i].token_id
+              d_model.times { |j| model.embedding.d_token_emb[token, j] += d_hidden[i, j] }
+            end
+          end
+          MicroGPT::PerfTrace.add_time("agpt.backward.embedding", Time.instant - embedding_started.not_nil!) if embedding_started
         end
       end
 
@@ -283,16 +300,132 @@ module MicroGPT
         layer_cache
       end
 
+      def optimized_attention_backward_head(
+        position : Int32,
+        ancestor_ids : Array(Int32),
+        layer : Int32,
+        head : Int32,
+        head_dims : Array(Int32),
+        n_layers : Int32,
+        d_out_data : Array(Float32),
+        d_out_base : Int32,
+        attn_weights : Mat,
+        q_part : Mat,
+        layer_cache : LayerKVCache,
+        accum : NodeGradAccum,
+        grad_accums : Hash(Int32, NodeGradAccum),
+        rope : RoPE
+      ) : {Array(Float32), Array(Float32), Array(Float32)}
+        hd = head_dims[head]
+        prefix_len = layer_cache.len
+        w_data = attn_weights.raw_data
+        q_data = q_part.raw_data
+        k_data = layer_cache.k_parts[head].raw_data
+        v_data = layer_cache.v_parts[head].raw_data
+        d_weights = Array(Float32).new(prefix_len, 0.0_f32)
+        scale = (1.0 / Math.sqrt(hd.to_f64)).to_f32
+        dot = 0.0_f64
+
+        prefix_len.times do |pos|
+          base = pos * hd
+          sum = 0.0_f32
+          hd.times do |j|
+            sum += d_out_data[d_out_base + j] * v_data[base + j]
+          end
+          d_weights[pos] = sum
+          dot += sum * w_data[pos]
+        end
+
+        d_scores = Array(Float32).new(prefix_len, 0.0_f32)
+        prefix_len.times do |pos|
+          d_scores[pos] = (w_data[pos] * (d_weights[pos] - dot) * scale).to_f32
+        end
+
+        dq_vals = Array(Float32).new(hd, 0.0_f32)
+        hd.times do |j|
+          sum = 0.0_f32
+          prefix_len.times do |pos|
+            sum += d_scores[pos] * k_data[pos * hd + j]
+          end
+          dq_vals[j] = sum
+        end
+
+        last = prefix_len - 1
+        dk_current_vals = Array(Float32).new(hd, 0.0_f32)
+        dv_current_vals = Array(Float32).new(hd, 0.0_f32)
+        accum_dk = accum.dk[layer][head].raw_data
+        accum_dv = accum.dv[layer][head].raw_data
+
+        prefix_len.times do |pos|
+          score_grad = d_scores[pos]
+          weight = w_data[pos]
+          if pos == last
+            hd.times do |j|
+              dk_current_vals[j] = score_grad * q_data[j] + accum_dk[j]
+              dv_current_vals[j] = weight * d_out_data[d_out_base + j] + accum_dv[j]
+            end
+          else
+            ancestor_id = ancestor_ids[pos]
+            acc = grad_accums[ancestor_id]? || begin
+              a = NodeGradAccum.new(n_layers, head_dims)
+              grad_accums[ancestor_id] = a
+              a
+            end
+            acc_dk = acc.dk[layer][head].raw_data
+            acc_dv = acc.dv[layer][head].raw_data
+            hd.times do |j|
+              acc_dk[j] += score_grad * q_data[j]
+              acc_dv[j] += weight * d_out_data[d_out_base + j]
+            end
+          end
+        end
+
+        apply_inverse_rope_values!(dq_vals, rope, position)
+        apply_inverse_rope_values!(dk_current_vals, rope, position)
+
+        {dq_vals, dk_current_vals, dv_current_vals}
+      end
+
       private def copy_mat(m : Mat) : Mat
         result = Mat.new(m.rows, m.cols)
         m.rows.times { |r| m.cols.times { |c| result[r, c] = m[r, c] } }
         result
       end
 
+      private def trace_sync_delta(section : String, &)
+        unless MicroGPT::PerfTrace.enabled?
+          yield
+          return
+        end
+
+        before_calls = MicroGPT::PerfTrace.count("sync_to_cpu.calls")
+        before_bytes = MicroGPT::PerfTrace.bytes("sync_to_cpu.calls")
+        before_ms = MicroGPT::PerfTrace.millis("sync_to_cpu")
+        yield
+        call_delta = MicroGPT::PerfTrace.count("sync_to_cpu.calls") - before_calls
+        byte_delta = MicroGPT::PerfTrace.bytes("sync_to_cpu.calls") - before_bytes
+        ms_delta = MicroGPT::PerfTrace.millis("sync_to_cpu") - before_ms
+        MicroGPT::PerfTrace.increment("#{section}.sync", call_delta)
+        MicroGPT::PerfTrace.add_bytes("#{section}.sync", byte_delta)
+        MicroGPT::PerfTrace.add_millis("#{section}.sync_to_cpu", ms_delta)
+      end
+
       private def extract_row(m : Mat, r : Int32) : Mat
         result = Mat.new(1, m.cols)
         m.cols.times { |c| result[0, c] = m[r, c] }
         result
+      end
+
+      private def apply_inverse_rope_values!(values : Array(Float32), rope : RoPE, position : Int32)
+        half = values.size // 2
+        half.times do |i|
+          c = rope.cos_cache[position, 2 * i]
+          s = rope.sin_cache[position, 2 * i]
+          x0 = values[2 * i]
+          x1 = values[2 * i + 1]
+          values[2 * i]     = x0 * c + x1 * s
+          values[2 * i + 1] = -x0 * s + x1 * c
+        end
       end
 
       # Batched layer norm backward: accumulates dgamma/dbeta across N rows.
@@ -303,29 +436,30 @@ module MicroGPT
         n = grad.rows
         d = grad.cols
         dx = Mat.new(n, d)
+        trace_sync_delta("agpt.backward.batched_ln_backward") do
+          n.times do |i|
+            sinv = std_inv[i, 0].to_f64
+            # Accumulate gamma/beta gradients
+            d.times do |j|
+              dgamma[0, j] += grad[i, j] * normed[i, j]
+              dbeta[0, j] += grad[i, j]
+            end
 
-        n.times do |i|
-          sinv = std_inv[i, 0].to_f64
-          # Accumulate gamma/beta gradients
-          d.times do |j|
-            dgamma[0, j] += grad[i, j] * normed[i, j]
-            dbeta[0, j] += grad[i, j]
-          end
+            # Per-row input gradient
+            mean_dn = 0.0_f64
+            mean_dn_n = 0.0_f64
+            d.times do |j|
+              dn = grad[i, j] * gamma[0, j]
+              mean_dn += dn
+              mean_dn_n += dn * normed[i, j]
+            end
+            mean_dn /= d
+            mean_dn_n /= d
 
-          # Per-row input gradient
-          mean_dn = 0.0_f64
-          mean_dn_n = 0.0_f64
-          d.times do |j|
-            dn = grad[i, j] * gamma[0, j]
-            mean_dn += dn
-            mean_dn_n += dn * normed[i, j]
-          end
-          mean_dn /= d
-          mean_dn_n /= d
-
-          d.times do |j|
-            dn = grad[i, j] * gamma[0, j]
-            dx[i, j] = ((dn - mean_dn - normed[i, j] * mean_dn_n) * sinv).to_f32
+            d.times do |j|
+              dn = grad[i, j] * gamma[0, j]
+              dx[i, j] = ((dn - mean_dn - normed[i, j] * mean_dn_n) * sinv).to_f32
+            end
           end
         end
 

@@ -859,6 +859,7 @@ module MicroGPT
       if walk_trainer = agpt_walk_trainer
         emit_val.call(0)
         steps.times do |step|
+          MicroGPT::PerfTrace.reset if MicroGPT::PerfTrace.enabled?
           epoch_started = Time.instant
           loss, nodes = walk_trainer.train_epoch(model)
           elapsed = Time.instant - epoch_started
@@ -867,6 +868,10 @@ module MicroGPT
           GC.collect if step % 2 == 0
 
           puts "Epoch #{step}/#{steps} (#{nodes} nodes, #{"%.1f" % elapsed.total_seconds}s): loss = #{"%.4f" % loss} avg = #{"%.4f" % avg_loss} [agpt trie-walk]"
+          if MicroGPT::PerfTrace.enabled?
+            lines = MicroGPT::PerfTrace.report_lines
+            puts "  [perf] #{lines.join(" | ")}" unless lines.empty?
+          end
           if step % 5 == 0
             seed = dataset.data[0, Math.min(16, dataset.data.size)]
             generated = model.generate(seed, 100, temperature: 0.8)

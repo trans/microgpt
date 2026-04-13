@@ -45,220 +45,257 @@ module MicroGPT
         corpus : TrieCorpus,
         parent_caches : Hash(Int32, Array(LayerKVCache))? = nil
       ) : {Array(NodeResult), Hash(Int32, Array(LayerKVCache))}
-        empty_caches = {} of Int32 => Array(LayerKVCache)
-        return {[] of NodeResult, empty_caches} if nodes.empty?
+        scoped_result = nil.as({Array(NodeResult), Hash(Int32, Array(LayerKVCache))}?)
+        MicroGPT::PerfTrace.with_scope("agpt.forward") do
+          empty_caches = {} of Int32 => Array(LayerKVCache)
+          scoped_result = {[] of NodeResult, empty_caches}
+          next if nodes.empty?
 
-        n = nodes.size
-        d_model = model.config.d_model
-        seq_len = model.config.seq_len
-        head_dims = model.blocks.first.attn.head_dims
-        n_layers = model.config.n_layers
-        n_heads = head_dims.size
+          n = nodes.size
+          d_model = model.config.d_model
+          seq_len = model.config.seq_len
+          head_dims = model.blocks.first.attn.head_dims
+          n_layers = model.config.n_layers
+          n_heads = head_dims.size
 
-        # --- Gather tokens and metadata ---
-        tokens = Array(Int32).new(n)
-        positions = Array(Int32).new(n)
-        ancestors = Array(Array(Int32)).new(n)
+          # --- Gather tokens and metadata ---
+          metadata_started = Time.instant if MicroGPT::PerfTrace.enabled?
+          tokens = Array(Int32).new(n)
+          positions = Array(Int32).new(n)
+          ancestors = Array(Array(Int32)).new(n)
 
-        nodes.each do |node|
-          parent = node.parent.not_nil!
-          token = node.token_id.not_nil!
-          position = node_positions[node.id]? || (node.depth - 1)
-          parent_ancestors = node_ancestor_ids[parent.id]
-          anc = parent_ancestors + [node.id]
+          nodes.each do |node|
+            parent = node.parent.not_nil!
+            token = node.token_id.not_nil!
+            position = node_positions[node.id]? || (node.depth - 1)
+            parent_ancestors = node_ancestor_ids[parent.id]
+            anc = parent_ancestors + [node.id]
 
-          tokens << token
-          positions << position
-          ancestors << anc
+            tokens << token
+            positions << position
+            ancestors << anc
 
-          # Update metadata maps
-          node_ancestor_ids[node.id] = anc
-          node_positions[node.id] = position
-        end
-
-        # --- Batch embedding: gather N rows from token_emb ---
-        x = if backend = MicroGPT.backend.as?(MicroGPT::CuBLASBackend)
-          backend.embedding_gather(model.embedding.token_emb, tokens, n, d_model)
-        else
-          m = Mat.new(n, d_model)
-          n.times do |i|
-            d_model.times { |j| m[i, j] = model.embedding.token_emb[tokens[i], j] }
+            # Update metadata maps
+            node_ancestor_ids[node.id] = anc
+            node_positions[node.id] = position
           end
-          m
-        end
+          MicroGPT::PerfTrace.add_time("agpt.forward.metadata", Time.instant - metadata_started.not_nil!) if metadata_started
 
-        # --- Per-block forward ---
-        # We need per-node BlockStepState for backward, so we track intermediates.
-        all_block_states = Array(Array(BlockStepState)).new(n) { [] of BlockStepState }
-        # Collect per-node, per-layer KV caches to pass to the next depth level
-        this_depth_caches = Hash(Int32, Array(LayerKVCache)).new
-        n.times { |i| this_depth_caches[nodes[i].id] = Array(LayerKVCache).new(n_layers) }
-
-        model.blocks.each_with_index do |block, li|
-          attn = block.attn
-
-          # Save block input for residual backward
-          x_input = copy_mat(x)
-
-          # Batched LN1: [N, d_model] → [N, d_model]
-          x_norm, ln1_norm, ln1_std_inv = MicroGPT.backend.layer_norm_forward(x, block.ln1.gamma, block.ln1.beta)
-          ln1_out = copy_mat(x_norm)
-
-          # Batched Q/K/V projections: [N, d_model] × W → [N, d_model]
-          q_all = x_norm * attn.wq.w
-          add_bias_rows!(q_all, attn.wq.b)
-          k_all = x_norm * attn.wk.w
-          add_bias_rows!(k_all, attn.wk.b)
-          v_all = x_norm * attn.wv.w
-          add_bias_rows!(v_all, attn.wv.b)
-
-          # Split by heads: each is [N, head_dim]
-          q_parts = split_cols(q_all, head_dims)
-          k_new_parts = split_cols(k_all, head_dims)
-          v_new_parts = split_cols(v_all, head_dims)
-
-          # Apply RoPE per head — all nodes at same depth share position
-          n_heads.times do |hi|
+          # --- Batch embedding: gather N rows from token_emb ---
+          embedding_started = Time.instant if MicroGPT::PerfTrace.enabled?
+          x = if backend = MicroGPT.backend.as?(MicroGPT::CuBLASBackend)
+            backend.embedding_gather(model.embedding.token_emb, tokens, n, d_model)
+          else
+            m = Mat.new(n, d_model)
             n.times do |i|
-              apply_rope_row!(q_parts[hi], i, attn.ropes[hi], positions[i])
-              apply_rope_row!(k_new_parts[hi], i, attn.ropes[hi], positions[i])
+              d_model.times { |j| m[i, j] = model.embedding.token_emb[tokens[i], j] }
             end
+            m
           end
+          MicroGPT::PerfTrace.add_time("agpt.forward.embedding", Time.instant - embedding_started.not_nil!) if embedding_started
 
-          # --- Per-node attention (different KV histories) ---
-          # Store each node's K/V contribution first, then compute attention.
-          # On GPU: pack Q + KV into contiguous buffers, one kernel launch.
-          # On CPU: per-node loop with incremental parent caches.
+          # --- Per-block forward ---
+          # We need per-node BlockStepState for backward, so we track intermediates.
+          all_block_states = Array(Array(BlockStepState)).new(n) { [] of BlockStepState }
+          # Collect per-node, per-layer KV caches to pass to the next depth level
+          this_depth_caches = Hash(Int32, Array(LayerKVCache)).new
+          n.times { |i| this_depth_caches[nodes[i].id] = Array(LayerKVCache).new(n_layers) }
 
-          per_node_attn_weights = Array(Array(Mat)).new(n)
+          model.blocks.each_with_index do |block, li|
+            attn = block.attn
+            block_started = Time.instant if MicroGPT::PerfTrace.enabled?
 
-          # First: extract and store each node's K/V from batched projections
-          node_k_rows = Array(Array(Mat)).new(n)
-          node_v_rows = Array(Array(Mat)).new(n)
-          n.times do |i|
-            k_row_parts = Array(Mat).new(n_heads)
-            v_row_parts = Array(Mat).new(n_heads)
-            n_heads.times do |hi|
-              hd = head_dims[hi]
-              k_row = Mat.new(1, hd)
-              v_row = Mat.new(1, hd)
-              hd.times do |j|
-                k_row[0, j] = k_new_parts[hi][i, j]
-                v_row[0, j] = v_new_parts[hi][i, j]
-              end
-              k_row_parts << k_row
-              v_row_parts << v_row
+            # Save block input for residual backward
+            x_input = copy_mat(x)
+
+            # Batched LN1: [N, d_model] → [N, d_model]
+            qkv_started = Time.instant if MicroGPT::PerfTrace.enabled?
+            x_norm, ln1_norm, ln1_std_inv = MicroGPT.backend.layer_norm_forward(x, block.ln1.gamma, block.ln1.beta)
+            ln1_out = copy_mat(x_norm)
+
+            # Batched Q/K/V projections: [N, d_model] × W → [N, d_model]
+            q_all = x_norm * attn.wq.w
+            add_bias_rows!(q_all, attn.wq.b)
+            k_all = x_norm * attn.wk.w
+            add_bias_rows!(k_all, attn.wk.b)
+            v_all = x_norm * attn.wv.w
+            add_bias_rows!(v_all, attn.wv.b)
+
+            # Split by heads: each is [N, head_dim]
+            q_parts = nil.as(Array(Mat)?)
+            k_new_parts = nil.as(Array(Mat)?)
+            v_new_parts = nil.as(Array(Mat)?)
+            trace_sync_delta("agpt.forward.layer#{li}.split_qkv") do
+              q_parts = split_cols(q_all, head_dims)
+              k_new_parts = split_cols(k_all, head_dims)
+              v_new_parts = split_cols(v_all, head_dims)
             end
-            node_k_rows << k_row_parts
-            node_v_rows << v_row_parts
-            kv_store.store_layer(nodes[i].id, li, k_row_parts, v_row_parts)
-          end
+            q_parts = q_parts.not_nil!
+            k_new_parts = k_new_parts.not_nil!
+            v_new_parts = v_new_parts.not_nil!
 
-          if MicroGPT.backend.is_a?(MicroGPT::CuBLASBackend)
-            # GPU path: pack all Q/KV, one kernel launch for all nodes
-            attn_outputs = gpu_batched_attention(
-              nodes, n, li, head_dims, n_heads, d_model, seq_len,
-              q_parts, node_k_rows, node_v_rows,
-              kv_store, corpus, per_node_attn_weights,
-              this_depth_caches
-            )
-          else
-            # CPU path: per-node with incremental parent caches
-            attn_outputs = Mat.new(n, d_model)
-            cpu_per_node_attention(
-              nodes, n, li, head_dims, n_heads, d_model, seq_len,
-              q_parts, node_k_rows, node_v_rows,
-              kv_store, corpus, parent_caches,
-              attn_outputs, per_node_attn_weights, this_depth_caches
-            )
-          end
-
-          # Batched WO: [N, d_model] × W_o → [N, d_model]
-          wo_input = copy_mat(attn_outputs)
-          attn_proj = attn_outputs * attn.wo.w
-          add_bias_rows!(attn_proj, attn.wo.b)
-
-          # Residual 1
-          x.add!(attn_proj)
-          x_after_attn = copy_mat(x)
-
-          # Batched LN2
-          x_norm2, ln2_norm, ln2_std_inv = MicroGPT.backend.layer_norm_forward(x, block.ln2.gamma, block.ln2.beta)
-          ln2_out = copy_mat(x_norm2)
-
-          # Batched FFN L1 + ReLU
-          h = x_norm2 * block.ff.l1.w
-          if MicroGPT.backend.is_a?(MicroGPT::CuBLASBackend)
-            h, ff_relu_mask = MicroGPT.backend.fused_bias_relu(h, block.ff.l1.b)
-          else
-            add_bias_rows!(h, block.ff.l1.b)
-            ff_relu_mask = Mat.new(h.rows, h.cols)
-            h.rows.times do |r|
-              h.cols.times do |c|
-                ff_relu_mask[r, c] = h[r, c] > 0 ? 1.0_f32 : 0.0_f32
-                h[r, c] *= ff_relu_mask[r, c]
+            # Apply RoPE per head — all nodes at same depth share position
+            trace_sync_delta("agpt.forward.layer#{li}.qkv_rope") do
+              n_heads.times do |hi|
+                n.times do |i|
+                  apply_rope_row!(q_parts[hi], i, attn.ropes[hi], positions[i])
+                  apply_rope_row!(k_new_parts[hi], i, attn.ropes[hi], positions[i])
+                end
               end
             end
+            MicroGPT::PerfTrace.add_time("agpt.forward.layer#{li}.qkv_rope", Time.instant - qkv_started.not_nil!) if qkv_started
+
+            # --- Per-node attention (different KV histories) ---
+            # Store each node's K/V contribution first, then compute attention.
+            # On GPU: pack Q + KV into contiguous buffers, one kernel launch.
+            # On CPU: per-node loop with incremental parent caches.
+
+            per_node_attn_weights = Array(Array(Mat)).new(n)
+
+            # First: extract and store each node's K/V from batched projections
+            kv_store_started = Time.instant if MicroGPT::PerfTrace.enabled?
+            node_k_rows = Array(Array(Mat)).new(n)
+            node_v_rows = Array(Array(Mat)).new(n)
+            trace_sync_delta("agpt.forward.layer#{li}.kv_store") do
+              n.times do |i|
+                k_row_parts = Array(Mat).new(n_heads)
+                v_row_parts = Array(Mat).new(n_heads)
+                n_heads.times do |hi|
+                  hd = head_dims[hi]
+                  k_row = Mat.new(1, hd)
+                  v_row = Mat.new(1, hd)
+                  hd.times do |j|
+                    k_row[0, j] = k_new_parts[hi][i, j]
+                    v_row[0, j] = v_new_parts[hi][i, j]
+                  end
+                  k_row_parts << k_row
+                  v_row_parts << v_row
+                end
+                node_k_rows << k_row_parts
+                node_v_rows << v_row_parts
+                kv_store.store_layer(nodes[i].id, li, k_row_parts, v_row_parts)
+              end
+            end
+            MicroGPT::PerfTrace.add_time("agpt.forward.layer#{li}.kv_store", Time.instant - kv_store_started.not_nil!) if kv_store_started
+
+            attention_started = Time.instant if MicroGPT::PerfTrace.enabled?
+            if MicroGPT.backend.is_a?(MicroGPT::CuBLASBackend)
+              # GPU path: pack all Q/KV, one kernel launch for all nodes
+              attn_outputs = gpu_batched_attention(
+                nodes, n, li, head_dims, n_heads, d_model, seq_len,
+                q_parts, node_k_rows, node_v_rows,
+                kv_store, corpus, per_node_attn_weights,
+                this_depth_caches
+              )
+            else
+              # CPU path: per-node with incremental parent caches
+              attn_outputs = Mat.new(n, d_model)
+              cpu_per_node_attention(
+                nodes, n, li, head_dims, n_heads, d_model, seq_len,
+                q_parts, node_k_rows, node_v_rows,
+                kv_store, corpus, parent_caches,
+                attn_outputs, per_node_attn_weights, this_depth_caches
+              )
+            end
+            MicroGPT::PerfTrace.add_time("agpt.forward.layer#{li}.attention", Time.instant - attention_started.not_nil!) if attention_started
+
+            # Batched WO: [N, d_model] × W_o → [N, d_model]
+            post_attn_started = Time.instant if MicroGPT::PerfTrace.enabled?
+            wo_input = copy_mat(attn_outputs)
+            attn_proj = attn_outputs * attn.wo.w
+            add_bias_rows!(attn_proj, attn.wo.b)
+
+            # Residual 1
+            x.add!(attn_proj)
+            x_after_attn = copy_mat(x)
+
+            # Batched LN2
+            x_norm2, ln2_norm, ln2_std_inv = MicroGPT.backend.layer_norm_forward(x, block.ln2.gamma, block.ln2.beta)
+            ln2_out = copy_mat(x_norm2)
+
+            # Batched FFN L1 + ReLU
+            h = x_norm2 * block.ff.l1.w
+            if MicroGPT.backend.is_a?(MicroGPT::CuBLASBackend)
+              h, ff_relu_mask = MicroGPT.backend.fused_bias_relu(h, block.ff.l1.b)
+            else
+              add_bias_rows!(h, block.ff.l1.b)
+              ff_relu_mask = Mat.new(h.rows, h.cols)
+              h.rows.times do |r|
+                h.cols.times do |c|
+                  ff_relu_mask[r, c] = h[r, c] > 0 ? 1.0_f32 : 0.0_f32
+                  h[r, c] *= ff_relu_mask[r, c]
+                end
+              end
+            end
+            ff_relu_out = copy_mat(h)
+
+            # Batched FFN L2
+            ff_out = h * block.ff.l2.w
+            add_bias_rows!(ff_out, block.ff.l2.b)
+
+            # Residual 2
+            x.add!(ff_out)
+            MicroGPT::PerfTrace.add_time("agpt.forward.layer#{li}.post_attn_ffn", Time.instant - post_attn_started.not_nil!) if post_attn_started
+
+            # Save per-node BlockStepState (extracting rows from batched matrices)
+            state_extract_started = Time.instant if MicroGPT::PerfTrace.enabled?
+            trace_sync_delta("agpt.forward.layer#{li}.state_extract") do
+              n.times do |i|
+                bss = BlockStepState.new(
+                  x_input: extract_row(x_input, i),
+                  ln1_out: extract_row(ln1_out, i),
+                  ln1_normed: extract_row(ln1_norm, i),
+                  ln1_std_inv: ln1_std_inv[i, 0].to_f64,
+                  q_parts: head_dims.map_with_index { |hd, hi| extract_row_slice(q_parts[hi], i) },
+                  attn_weights: per_node_attn_weights[i],
+                  wo_input: extract_row(wo_input, i),
+                  x_after_attn: extract_row(x_after_attn, i),
+                  ln2_out: extract_row(ln2_out, i),
+                  ln2_normed: extract_row(ln2_norm, i),
+                  ln2_std_inv: ln2_std_inv[i, 0].to_f64,
+                  ff_relu_out: extract_row(ff_relu_out, i),
+                  ff_relu_mask: extract_row(ff_relu_mask, i)
+                )
+                all_block_states[i] << bss
+              end
+            end
+            MicroGPT::PerfTrace.add_time("agpt.forward.layer#{li}.state_extract", Time.instant - state_extract_started.not_nil!) if state_extract_started
+            MicroGPT::PerfTrace.add_time("agpt.forward.layer#{li}.total", Time.instant - block_started.not_nil!) if block_started
           end
-          ff_relu_out = copy_mat(h)
 
-          # Batched FFN L2
-          ff_out = h * block.ff.l2.w
-          add_bias_rows!(ff_out, block.ff.l2.b)
-
-          # Residual 2
-          x.add!(ff_out)
-
-          # Save per-node BlockStepState (extracting rows from batched matrices)
-          n.times do |i|
-            bss = BlockStepState.new(
-              x_input: extract_row(x_input, i),
-              ln1_out: extract_row(ln1_out, i),
-              ln1_normed: extract_row(ln1_norm, i),
-              ln1_std_inv: ln1_std_inv[i, 0].to_f64,
-              q_parts: head_dims.map_with_index { |hd, hi| extract_row_slice(q_parts[hi], i) },
-              attn_weights: per_node_attn_weights[i],
-              wo_input: extract_row(wo_input, i),
-              x_after_attn: extract_row(x_after_attn, i),
-              ln2_out: extract_row(ln2_out, i),
-              ln2_normed: extract_row(ln2_norm, i),
-              ln2_std_inv: ln2_std_inv[i, 0].to_f64,
-              ff_relu_out: extract_row(ff_relu_out, i),
-              ff_relu_mask: extract_row(ff_relu_mask, i)
-            )
-            all_block_states[i] << bss
-          end
-        end
-
-        # --- Final norm (batched) ---
-        final_x = copy_mat(x)
-        final_out, final_norm, final_std_inv = MicroGPT.backend.layer_norm_forward(
-          x, model.final_norm.gamma, model.final_norm.beta
-        )
-        final_norm_out = copy_mat(final_out)
-
-        # --- Output projection (batched): [N, d_model] × W → [N, vocab_size] ---
-        logits = final_out * model.output.proj.w
-        add_bias_rows!(logits, model.output.proj.b)
-
-        # --- Build per-node results ---
-        results = Array(NodeResult).new(n)
-        n.times do |i|
-          results << NodeResult.new(
-            node_id: nodes[i].id,
-            logits: extract_row(logits, i),
-            block_states: all_block_states[i],
-            final_x: extract_row(final_x, i),
-            final_normed: extract_row(final_norm, i),
-            final_std_inv: final_std_inv[i, 0].to_f64,
-            final_norm_out: extract_row(final_norm_out, i),
-            token_id: tokens[i],
-            position: positions[i],
-            ancestor_ids: ancestors[i]
+          # --- Final norm (batched) ---
+          final_started = Time.instant if MicroGPT::PerfTrace.enabled?
+          final_x = copy_mat(x)
+          final_out, final_norm, final_std_inv = MicroGPT.backend.layer_norm_forward(
+            x, model.final_norm.gamma, model.final_norm.beta
           )
-        end
+          final_norm_out = copy_mat(final_out)
 
-        {results, this_depth_caches}
+          # --- Output projection (batched): [N, d_model] × W → [N, vocab_size] ---
+          logits = final_out * model.output.proj.w
+          add_bias_rows!(logits, model.output.proj.b)
+
+          # --- Build per-node results ---
+          results = Array(NodeResult).new(n)
+          n.times do |i|
+            results << NodeResult.new(
+              node_id: nodes[i].id,
+              logits: extract_row(logits, i),
+              block_states: all_block_states[i],
+              final_x: extract_row(final_x, i),
+              final_normed: extract_row(final_norm, i),
+              final_std_inv: final_std_inv[i, 0].to_f64,
+              final_norm_out: extract_row(final_norm_out, i),
+              token_id: tokens[i],
+              position: positions[i],
+              ancestor_ids: ancestors[i]
+            )
+          end
+          MicroGPT::PerfTrace.add_time("agpt.forward.final", Time.instant - final_started.not_nil!) if final_started
+
+          scoped_result = {results, this_depth_caches}
+        end
+        scoped_result.not_nil!
       end
 
       # --- Helpers ---
@@ -291,6 +328,24 @@ module MicroGPT
         result
       end
 
+      private def trace_sync_delta(section : String, &)
+        unless MicroGPT::PerfTrace.enabled?
+          yield
+          return
+        end
+
+        before_calls = MicroGPT::PerfTrace.count("sync_to_cpu.calls")
+        before_bytes = MicroGPT::PerfTrace.bytes("sync_to_cpu.calls")
+        before_ms = MicroGPT::PerfTrace.millis("sync_to_cpu")
+        yield
+        call_delta = MicroGPT::PerfTrace.count("sync_to_cpu.calls") - before_calls
+        byte_delta = MicroGPT::PerfTrace.bytes("sync_to_cpu.calls") - before_bytes
+        ms_delta = MicroGPT::PerfTrace.millis("sync_to_cpu") - before_ms
+        MicroGPT::PerfTrace.increment("#{section}.sync", call_delta)
+        MicroGPT::PerfTrace.add_bytes("#{section}.sync", byte_delta)
+        MicroGPT::PerfTrace.add_millis("#{section}.sync_to_cpu", ms_delta)
+      end
+
       # GPU path: pack Q + KV into flat arrays, one CUDA kernel call.
       private def gpu_batched_attention(
         nodes, n, li, head_dims, n_heads, d_model, seq_len,
@@ -309,6 +364,7 @@ module MicroGPT
         max_len = prefix_lens.max
 
         # Pack Q: [N * n_heads, hd] — interleaved by head
+        q_pack_started = Time.instant if MicroGPT::PerfTrace.enabled?
         q_flat = Array(Float32).new(n * n_heads * hd, 0.0_f32)
         n.times do |i|
           n_heads.times do |hi|
@@ -316,6 +372,7 @@ module MicroGPT
             hd.times { |j| q_flat[base + j] = q_parts[hi][i, j] }
           end
         end
+        MicroGPT::PerfTrace.add_time("agpt.gpu_attn.q_pack", Time.instant - q_pack_started.not_nil!) if q_pack_started
 
         # Pack KV: for each node, collect ancestor K/V entries + own entry
         # Layout: position p of node i at kv_offset[i]+p, heads interleaved
@@ -330,6 +387,7 @@ module MicroGPT
         k_flat = Array(Float32).new(total_kv * n_heads * hd, 0.0_f32)
         v_flat = Array(Float32).new(total_kv * n_heads * hd, 0.0_f32)
 
+        kv_pack_started = Time.instant if MicroGPT::PerfTrace.enabled?
         n.times do |i|
           node_id = nodes[i].id
           offset = kv_offsets[i]
@@ -362,8 +420,10 @@ module MicroGPT
             pos += 1
           end
         end
+        MicroGPT::PerfTrace.add_time("agpt.gpu_attn.kv_pack", Time.instant - kv_pack_started.not_nil!) if kv_pack_started
 
         # Allocate GPU buffers and copy
+        upload_started = Time.instant if MicroGPT::PerfTrace.enabled?
         q_gpu = gpu_alloc_copy(q_flat)
         k_gpu = gpu_alloc_copy(k_flat)
         v_gpu = gpu_alloc_copy(v_flat)
@@ -373,24 +433,39 @@ module MicroGPT
         out_gpu = gpu_alloc(out_size)
         weights_size = n * n_heads * max_len
         weights_gpu = gpu_alloc(weights_size)
+        if upload_started
+          total_upload_bytes = ((q_flat.size + k_flat.size + v_flat.size) * sizeof(Float32) +
+            (kv_offsets.size + prefix_lens.size) * sizeof(Int32)).to_i64
+          MicroGPT::PerfTrace.increment("agpt.gpu_attn.upload")
+          MicroGPT::PerfTrace.add_bytes("agpt.gpu_attn.upload", total_upload_bytes)
+          MicroGPT::PerfTrace.add_time("agpt.gpu_attn.upload", Time.instant - upload_started.not_nil!)
+        end
 
         scale = (1.0 / Math.sqrt(hd.to_f64)).to_f32
 
+        kernel_started = Time.instant if MicroGPT::PerfTrace.enabled?
         LibCUDAKernels.cuda_batched_varlen_attention(
           q_gpu, k_gpu, v_gpu, offsets_gpu, lengths_gpu,
           out_gpu, weights_gpu,
           n, n_heads, hd, max_len, scale
         )
         LibCUDAKernels.cuda_sync
+        MicroGPT::PerfTrace.add_time("agpt.gpu_attn.kernel", Time.instant - kernel_started.not_nil!) if kernel_started
 
         unpacked_gpu = gpu_alloc(n * d_model)
         LibCUDAKernels.cuda_unpack_batched_attn_output(
           out_gpu, unpacked_gpu, n, n_heads, hd
         )
 
+        download_started = Time.instant if MicroGPT::PerfTrace.enabled?
         weights_host = Array(Float32).new(weights_size, 0.0_f32)
         LibCUDA.cudaMemcpy(weights_host.to_unsafe.as(Void*), weights_gpu.as(Void*),
                            weights_size.to_u64 * sizeof(Float32), 2)
+        if download_started
+          MicroGPT::PerfTrace.increment("agpt.gpu_attn.download")
+          MicroGPT::PerfTrace.add_bytes("agpt.gpu_attn.download", (weights_size * sizeof(Float32)).to_i64)
+          MicroGPT::PerfTrace.add_time("agpt.gpu_attn.download", Time.instant - download_started.not_nil!)
+        end
 
         attn_outputs = Mat.new(n, d_model, unpacked_gpu.as(Void*))
 

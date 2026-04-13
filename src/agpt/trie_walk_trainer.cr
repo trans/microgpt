@@ -40,6 +40,7 @@ module MicroGPT
       #
       # Returns {mean_loss, nodes_trained}.
       def train_epoch(model : MiniGPT) : {Float64, Int32}
+        epoch_started = Time.instant if MicroGPT::PerfTrace.enabled?
         seq_len = model.config.seq_len
         head_dims = model.blocks.first.attn.head_dims
         n_layers = model.config.n_layers
@@ -61,6 +62,7 @@ module MicroGPT
         @corpus.each_depth_level do |depth, nodes|
           next if depth == 0
 
+          depth_started = Time.instant if MicroGPT::PerfTrace.enabled?
           eligible = Array(TrieNode).new
           nodes.each do |node|
             parent = node.parent.not_nil!
@@ -81,67 +83,96 @@ module MicroGPT
           end
 
           # Batched forward for ALL nodes at this depth — shared projections
+          forward_started = Time.instant if MicroGPT::PerfTrace.enabled?
           results, this_caches = BatchedDepthForward.forward_depth(
             eligible, node_ancestor_ids, node_positions, kv_store, model, @corpus, prev_caches
           )
           prev_caches = this_caches
+          MicroGPT::PerfTrace.observe_max("agpt.forward_stage_bytes", Mat.allocated_bytes)
+          MicroGPT::PerfTrace.add_time("agpt.epoch.forward", Time.instant - forward_started.not_nil!) if forward_started
 
           # Compute loss and build result index
-          loss_info = {} of Int32 => Hash(Int32, Int32)
+          loss_started = Time.instant if MicroGPT::PerfTrace.enabled?
+          loss_grads = {} of Int32 => Mat
           result_map = {} of Int32 => BatchedDepthForward::NodeResult
-          results.each do |result|
-            result_map[result.node_id] = result
-            node = @corpus.node_for_id(result.node_id)
-            unless node.next_token_counts.empty?
-              counts = node.next_token_counts_hash
-              loss_value, _ = @loss_fn.loss_and_backward(result.logits, counts)
-              loss_info[result.node_id] = counts
-              total_loss += loss_value
-              nodes_trained += 1
+          MicroGPT::PerfTrace.with_scope("agpt.loss") do
+            results.each do |result|
+              result_map[result.node_id] = result
+              node = @corpus.node_for_id(result.node_id)
+              unless node.next_token_counts.empty?
+                counts = node.next_token_counts_hash
+                loss_value, d_logits = @loss_fn.loss_and_backward(result.logits, counts)
+                loss_grads[result.node_id] = d_logits
+                total_loss += loss_value
+                nodes_trained += 1
+              end
             end
           end
+          MicroGPT::PerfTrace.add_time("agpt.epoch.loss", Time.instant - loss_started.not_nil!) if loss_started
 
           # Partition into subtries by root child
+          partition_started = Time.instant if MicroGPT::PerfTrace.enabled?
           subtries = {} of Int32 => Array(BatchedDepthForward::NodeResult)
           eligible.each do |node|
             root_id = node_root_child[node.id]
             (subtries[root_id] ||= [] of BatchedDepthForward::NodeResult) << result_map[node.id]
+          end
+          if partition_started
+            MicroGPT::PerfTrace.add_time("agpt.epoch.partition", Time.instant - partition_started.not_nil!)
+            MicroGPT::PerfTrace.increment("agpt.epoch.subtries", subtries.size.to_i64)
           end
 
           # Process each subtrie: backward uses forward results directly
           # (no re-forward needed — local-depth backward is at the same depth
           # we just forwarded, so BlockStepState is already in results)
           subtries.each do |_root_id, subtrie_results|
-            zero_gradients(model)
+            backward_started = Time.instant if MicroGPT::PerfTrace.enabled?
+            MicroGPT::PerfTrace.with_scope("agpt.zero_gradients") do
+              zero_gradients(model)
+            end
             grad_accums = {} of Int32 => NodeGradAccum
 
-            subtrie_grads = subtrie_results.map do |result|
-              if counts = loss_info[result.node_id]?
-                # Use logits already computed in forward — no recomputation
-                _, dl = @loss_fn.loss_and_backward(result.logits, counts)
-                dl
-              else
-                Mat.new(1, model.config.vocab_size)
+            subtrie_grads = nil.as(Array(Mat)?)
+            MicroGPT::PerfTrace.with_scope("agpt.subtrie_loss_grads") do
+              subtrie_grads = subtrie_results.map do |result|
+                if d_logits = loss_grads.delete(result.node_id)
+                  # Reuse the per-node logits gradient computed during the
+                  # loss pass instead of recomputing weighted loss a second time.
+                  d_logits
+                else
+                  Mat.new(1, model.config.vocab_size)
+                end
               end
             end
+            subtrie_grads = subtrie_grads.not_nil!
 
             BatchedDepthBackward.backward_depth(
               subtrie_results, subtrie_grads, grad_accums, kv_store, model, @corpus, this_caches
             )
+            MicroGPT::PerfTrace.observe_max("agpt.backward_stage_bytes", Mat.allocated_bytes)
+            MicroGPT::PerfTrace.add_time("agpt.epoch.backward", Time.instant - backward_started.not_nil!) if backward_started
 
             # Normalize by subtrie size and update
             if subtrie_results.size > 0
-              scale_gradients(model, 1.0 / subtrie_results.size)
-              lr = model.config.learning_rate
-              model.embedding.update(lr)
-              model.blocks.each &.update(lr)
-              model.final_norm.update(lr)
-              model.output.update(lr)
+              update_started = Time.instant if MicroGPT::PerfTrace.enabled?
+              MicroGPT::PerfTrace.with_scope("agpt.update") do
+                scale_gradients(model, 1.0 / subtrie_results.size)
+                lr = model.config.learning_rate
+                model.embedding.update(lr)
+                model.blocks.each &.update(lr)
+                model.final_norm.update(lr)
+                model.output.update(lr)
+              end
+              MicroGPT::PerfTrace.observe_max("agpt.update_stage_bytes", Mat.allocated_bytes)
+              MicroGPT::PerfTrace.add_time("agpt.epoch.update", Time.instant - update_started.not_nil!) if update_started
             end
           end
+
+          MicroGPT::PerfTrace.add_time("agpt.epoch.depth_total", Time.instant - depth_started.not_nil!) if depth_started
         end
 
         mean_loss = nodes_trained > 0 ? total_loss / nodes_trained : 0.0
+        MicroGPT::PerfTrace.add_time("agpt.epoch.total", Time.instant - epoch_started.not_nil!) if epoch_started
         {mean_loss, nodes_trained}
       end
 
@@ -265,6 +296,7 @@ module MicroGPT
       end
 
       private def scale_gradients(model : MiniGPT, scale : Float64)
+        trace_sync_delta("agpt.epoch.scale_gradients") do
         s = scale.to_f32
         model.embedding.d_token_emb.scale!(s)
         model.blocks.each do |block|
@@ -279,6 +311,7 @@ module MicroGPT
         end
         model.final_norm.dgamma.scale!(s); model.final_norm.dbeta.scale!(s)
         model.output.proj.dw.scale!(s); model.output.proj.db.scale!(s)
+        end
       end
 
       private def zero_gradients(model : MiniGPT)
@@ -295,6 +328,24 @@ module MicroGPT
         end
         model.final_norm.dgamma.zero!; model.final_norm.dbeta.zero!
         model.output.proj.dw.zero!; model.output.proj.db.zero!
+      end
+
+      private def trace_sync_delta(section : String, &)
+        unless MicroGPT::PerfTrace.enabled?
+          yield
+          return
+        end
+
+        before_calls = MicroGPT::PerfTrace.count("sync_to_cpu.calls")
+        before_bytes = MicroGPT::PerfTrace.bytes("sync_to_cpu.calls")
+        before_ms = MicroGPT::PerfTrace.millis("sync_to_cpu")
+        yield
+        call_delta = MicroGPT::PerfTrace.count("sync_to_cpu.calls") - before_calls
+        byte_delta = MicroGPT::PerfTrace.bytes("sync_to_cpu.calls") - before_bytes
+        ms_delta = MicroGPT::PerfTrace.millis("sync_to_cpu") - before_ms
+        MicroGPT::PerfTrace.increment("#{section}.sync", call_delta)
+        MicroGPT::PerfTrace.add_bytes("#{section}.sync", byte_delta)
+        MicroGPT::PerfTrace.add_millis("#{section}.sync_to_cpu", ms_delta)
       end
 
     end

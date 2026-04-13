@@ -9,6 +9,112 @@
 
 module MicroGPT
 
+module PerfTrace
+  @@counts = Hash(String, Int64).new(0_i64)
+  @@bytes = Hash(String, Int64).new(0_i64)
+  @@millis = Hash(String, Float64).new(0.0_f64)
+  @@maxima = Hash(String, Int64).new(0_i64)
+  @@scope_stack = [] of String
+
+  def self.enabled? : Bool
+    ENV["MICROGPT_PERF_TRACE"]? == "1"
+  end
+
+  def self.reset
+    @@counts.clear
+    @@bytes.clear
+    @@millis.clear
+    @@maxima.clear
+    @@scope_stack.clear
+  end
+
+  def self.increment(key : String, by : Int64 = 1_i64)
+    return unless enabled?
+    @@counts[key] += by
+  end
+
+  def self.add_bytes(key : String, bytes : Int64)
+    return unless enabled?
+    @@bytes[key] += bytes
+  end
+
+  def self.add_time(key : String, span : Time::Span)
+    return unless enabled?
+    @@millis[key] += span.total_milliseconds
+  end
+
+  def self.add_millis(key : String, ms : Float64)
+    return unless enabled?
+    @@millis[key] += ms
+  end
+
+  def self.count(key : String) : Int64
+    @@counts[key]? || 0_i64
+  end
+
+  def self.bytes(key : String) : Int64
+    @@bytes[key]? || 0_i64
+  end
+
+  def self.millis(key : String) : Float64
+    @@millis[key]? || 0.0_f64
+  end
+
+  def self.observe_max(key : String, value : Int64)
+    return unless enabled?
+    current = @@maxima[key]? || Int64::MIN
+    @@maxima[key] = value if value > current
+  end
+
+  def self.with_scope(scope : String, &)
+    unless enabled?
+      yield
+      return
+    end
+
+    @@scope_stack << scope
+    begin
+      yield
+    ensure
+      @@scope_stack.pop?
+    end
+  end
+
+  def self.current_scope : String?
+    @@scope_stack.last?
+  end
+
+  def self.report_lines : Array(String)
+    lines = [] of String
+
+    @@millis.keys.sort.each do |key|
+      lines << "#{key}=#{"%.1f" % @@millis[key]}ms"
+    end
+
+    @@counts.keys.sort.each do |key|
+      value = @@counts[key]
+      if bytes = @@bytes[key]?
+        mib = bytes.to_f64 / (1024.0 * 1024.0)
+        lines << "#{key}=#{value} (#{"%.2f" % mib} MiB)"
+      else
+        lines << "#{key}=#{value}"
+      end
+    end
+
+    @@maxima.keys.sort.each do |key|
+      value = @@maxima[key]
+      if key.ends_with?("_bytes")
+        mib = value.to_f64 / (1024.0 * 1024.0)
+        lines << "#{key}=#{"%.2f" % mib} MiB"
+      else
+        lines << "#{key}=#{value}"
+      end
+    end
+
+    lines
+  end
+end
+
 # =============================================================================
 # Core Matrix Type
 # =============================================================================
@@ -39,6 +145,7 @@ class Mat
             "cap #{@@max_bytes / (1024 * 1024)} MiB)"
     end
     @@allocated_bytes += size
+    PerfTrace.observe_max("mat.allocated_bytes", @@allocated_bytes)
   end
 
   private def track_free
@@ -205,7 +312,24 @@ class Mat
   def sync_to_cpu
     return if @cpu_valid
     return if @gpu_ptr.null?
-    MicroGPT.backend.gpu_download(@data.to_unsafe.as(Void*), @gpu_ptr, byte_size)
+    if PerfTrace.enabled?
+      started = Time.instant
+      MicroGPT.backend.gpu_download(@data.to_unsafe.as(Void*), @gpu_ptr, byte_size)
+      PerfTrace.increment("sync_to_cpu.calls")
+      PerfTrace.add_bytes("sync_to_cpu.calls", byte_size.to_i64)
+      PerfTrace.add_time("sync_to_cpu", Time.instant - started)
+      if scope = PerfTrace.current_scope
+        PerfTrace.increment("#{scope}.auto_sync")
+        PerfTrace.add_bytes("#{scope}.auto_sync", byte_size.to_i64)
+        PerfTrace.add_time("#{scope}.auto_sync_to_cpu", Time.instant - started)
+      else
+        PerfTrace.increment("sync_to_cpu.unscoped")
+        PerfTrace.add_bytes("sync_to_cpu.unscoped", byte_size.to_i64)
+        PerfTrace.add_time("sync_to_cpu.unscoped", Time.instant - started)
+      end
+    else
+      MicroGPT.backend.gpu_download(@data.to_unsafe.as(Void*), @gpu_ptr, byte_size)
+    end
     @cpu_valid = true
   end
 
@@ -267,6 +391,9 @@ module MathUtils
 
   def split_cols(m : Mat, sizes : Array(Int32)) : Array(Mat)
     result = [] of Mat
+    # AGPT note: a contiguous-copy variant here did not materially reduce the
+    # CUDA-path hidden sync cost; the meaningful remaining downloads come from
+    # later row extraction/state materialization instead.
     col_offset = 0
     sizes.each do |size|
       chunk = Mat.new(m.rows, size)
@@ -1546,5 +1673,3 @@ class MiniGPT
 end
 
 end
-
-

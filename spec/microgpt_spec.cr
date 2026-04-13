@@ -1,9 +1,7 @@
 require "./spec_helper"
 
-describe Microgpt do
-  # TODO: Write tests
-
-  it "works" do
-    false.should eq(true)
+describe MicroGPT do
+  it "has a version" do
+    MicroGPT::VERSION.should eq("0.1.0")
   end
 end
