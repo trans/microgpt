@@ -903,6 +903,40 @@ extern "C" void cuda_batched_varlen_attention(
     );
 }
 
+__global__ void unpack_batched_attn_output_kernel(
+    const float* packed_output,
+    float* unpacked_output,
+    int n_nodes,
+    int n_heads,
+    int head_dim
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = n_nodes * n_heads * head_dim;
+    if (idx >= total) return;
+
+    int j = idx % head_dim;
+    int head = (idx / head_dim) % n_heads;
+    int node = idx / (n_heads * head_dim);
+    int d_model = n_heads * head_dim;
+
+    unpacked_output[node * d_model + head * head_dim + j] = packed_output[idx];
+}
+
+extern "C" void cuda_unpack_batched_attn_output(
+    const float* packed_output,
+    float* unpacked_output,
+    int n_nodes,
+    int n_heads,
+    int head_dim
+) {
+    int total = n_nodes * n_heads * head_dim;
+    int threads = 256;
+    int blocks = (total + threads - 1) / threads;
+    unpack_batched_attn_output_kernel<<<blocks, threads>>>(
+        packed_output, unpacked_output, n_nodes, n_heads, head_dim
+    );
+}
+
 // =============================================================================
 // Synchronize
 // =============================================================================

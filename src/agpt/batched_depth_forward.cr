@@ -77,9 +77,14 @@ module MicroGPT
         end
 
         # --- Batch embedding: gather N rows from token_emb ---
-        x = Mat.new(n, d_model)
-        n.times do |i|
-          d_model.times { |j| x[i, j] = model.embedding.token_emb[tokens[i], j] }
+        x = if backend = MicroGPT.backend.as?(MicroGPT::CuBLASBackend)
+          backend.embedding_gather(model.embedding.token_emb, tokens, n, d_model)
+        else
+          m = Mat.new(n, d_model)
+          n.times do |i|
+            d_model.times { |j| m[i, j] = model.embedding.token_emb[tokens[i], j] }
+          end
+          m
         end
 
         # --- Per-block forward ---
@@ -125,7 +130,6 @@ module MicroGPT
           # On GPU: pack Q + KV into contiguous buffers, one kernel launch.
           # On CPU: per-node loop with incremental parent caches.
 
-          attn_outputs = Mat.new(n, d_model)
           per_node_attn_weights = Array(Array(Mat)).new(n)
 
           # First: extract and store each node's K/V from batched projections
@@ -152,14 +156,15 @@ module MicroGPT
 
           if MicroGPT.backend.is_a?(MicroGPT::CuBLASBackend)
             # GPU path: pack all Q/KV, one kernel launch for all nodes
-            gpu_batched_attention(
+            attn_outputs = gpu_batched_attention(
               nodes, n, li, head_dims, n_heads, d_model, seq_len,
               q_parts, node_k_rows, node_v_rows,
-              kv_store, corpus, attn_outputs, per_node_attn_weights,
+              kv_store, corpus, per_node_attn_weights,
               this_depth_caches
             )
           else
             # CPU path: per-node with incremental parent caches
+            attn_outputs = Mat.new(n, d_model)
             cpu_per_node_attention(
               nodes, n, li, head_dims, n_heads, d_model, seq_len,
               q_parts, node_k_rows, node_v_rows,
@@ -183,12 +188,16 @@ module MicroGPT
 
           # Batched FFN L1 + ReLU
           h = x_norm2 * block.ff.l1.w
-          add_bias_rows!(h, block.ff.l1.b)
-          ff_relu_mask = Mat.new(h.rows, h.cols)
-          h.rows.times do |r|
-            h.cols.times do |c|
-              ff_relu_mask[r, c] = h[r, c] > 0 ? 1.0_f32 : 0.0_f32
-              h[r, c] *= ff_relu_mask[r, c]
+          if MicroGPT.backend.is_a?(MicroGPT::CuBLASBackend)
+            h, ff_relu_mask = MicroGPT.backend.fused_bias_relu(h, block.ff.l1.b)
+          else
+            add_bias_rows!(h, block.ff.l1.b)
+            ff_relu_mask = Mat.new(h.rows, h.cols)
+            h.rows.times do |r|
+              h.cols.times do |c|
+                ff_relu_mask[r, c] = h[r, c] > 0 ? 1.0_f32 : 0.0_f32
+                h[r, c] *= ff_relu_mask[r, c]
+              end
             end
           end
           ff_relu_out = copy_mat(h)
@@ -255,8 +264,12 @@ module MicroGPT
       # --- Helpers ---
 
       private def add_bias_rows!(m : Mat, bias : Mat)
-        m.rows.times do |r|
-          m.cols.times { |c| m[r, c] += bias[0, c] }
+        if MicroGPT.backend.is_a?(MicroGPT::CuBLASBackend)
+          MicroGPT.backend.bias_add(m, bias)
+        else
+          m.rows.times do |r|
+            m.cols.times { |c| m[r, c] += bias[0, c] }
+          end
         end
       end
 
@@ -282,9 +295,9 @@ module MicroGPT
       private def gpu_batched_attention(
         nodes, n, li, head_dims, n_heads, d_model, seq_len,
         q_parts, node_k_rows, node_v_rows,
-        kv_store, corpus, attn_outputs, per_node_attn_weights,
+        kv_store, corpus, per_node_attn_weights,
         this_depth_caches
-      )
+      ) : Mat
         hd = head_dims[0]  # assumes uniform heads for GPU path
 
         # Compute prefix lengths and max_len
@@ -370,24 +383,20 @@ module MicroGPT
         )
         LibCUDAKernels.cuda_sync
 
-        # Read back results
-        out_host = Array(Float32).new(out_size, 0.0_f32)
-        LibCUDA.cudaMemcpy(out_host.to_unsafe.as(Void*), out_gpu.as(Void*),
-                           out_size.to_u64 * sizeof(Float32), 2) # cudaMemcpyDeviceToHost=2
+        unpacked_gpu = gpu_alloc(n * d_model)
+        LibCUDAKernels.cuda_unpack_batched_attn_output(
+          out_gpu, unpacked_gpu, n, n_heads, hd
+        )
 
         weights_host = Array(Float32).new(weights_size, 0.0_f32)
         LibCUDA.cudaMemcpy(weights_host.to_unsafe.as(Void*), weights_gpu.as(Void*),
                            weights_size.to_u64 * sizeof(Float32), 2)
 
-        # Unpack attention outputs into attn_outputs [N, d_model]
+        attn_outputs = Mat.new(n, d_model, unpacked_gpu.as(Void*))
+
         n.times do |i|
-          col_offset = 0
           head_weights = Array(Mat).new(n_heads)
           n_heads.times do |hi|
-            base = (i * n_heads + hi) * hd
-            hd.times { |j| attn_outputs[i, col_offset + j] = out_host[base + j] }
-            col_offset += hd
-
             # Unpack weights for backward
             w = Mat.new(1, prefix_lens[i])
             w_base = (i * n_heads + hi) * max_len
@@ -407,6 +416,8 @@ module MicroGPT
         gpu_free(q_gpu); gpu_free(k_gpu); gpu_free(v_gpu)
         gpu_free(offsets_gpu.as(Float32*)); gpu_free(lengths_gpu.as(Float32*))
         gpu_free(out_gpu); gpu_free(weights_gpu)
+
+        attn_outputs
       end
 
       # CPU path: per-node attention with incremental parent caches

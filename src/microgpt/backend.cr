@@ -558,6 +558,9 @@ lib LibCUDAKernels
     output : Float32*, weights_out : Float32*,
     n_nodes : Int32, n_heads : Int32, head_dim : Int32,
     max_len : Int32, scale : Float32)
+  fun cuda_unpack_batched_attn_output(
+    packed_output : Float32*, unpacked_output : Float32*,
+    n_nodes : Int32, n_heads : Int32, head_dim : Int32)
   fun cuda_sync
 end
 
