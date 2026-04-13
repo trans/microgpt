@@ -108,15 +108,17 @@ module MicroGPT
             (subtries[root_id] ||= [] of BatchedDepthForward::NodeResult) << result_map[node.id]
           end
 
-          # Process each subtrie: backward + normalize + update
+          # Process each subtrie: backward uses forward results directly
+          # (no re-forward needed — local-depth backward is at the same depth
+          # we just forwarded, so BlockStepState is already in results)
           subtries.each do |_root_id, subtrie_results|
             zero_gradients(model)
             grad_accums = {} of Int32 => NodeGradAccum
 
             subtrie_grads = subtrie_results.map do |result|
               if counts = loss_info[result.node_id]?
-                logits = model.output.forward(model.final_norm.forward(result.final_x))
-                _, dl = @loss_fn.loss_and_backward(logits, counts)
+                # Use logits already computed in forward — no recomputation
+                _, dl = @loss_fn.loss_and_backward(result.logits, counts)
                 dl
               else
                 Mat.new(1, model.config.vocab_size)
@@ -124,7 +126,7 @@ module MicroGPT
             end
 
             BatchedDepthBackward.backward_depth(
-              subtrie_results, subtrie_grads, grad_accums, kv_store, model, @corpus
+              subtrie_results, subtrie_grads, grad_accums, kv_store, model, @corpus, this_caches
             )
 
             # Normalize by subtrie size and update

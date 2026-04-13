@@ -17,13 +17,16 @@ module MicroGPT
       # grad_accums: accumulated dK/dV from deeper levels (mutated: new ancestor grads scattered)
       # kv_store:    for reconstructing per-node KV caches for attention backward
       # model:       the MiniGPT model (weight gradients accumulated in place)
+      # forward_caches: if provided, reuses KV caches from the forward pass
+      # instead of reconstructing from kv_store. Key = node_id → Array(LayerKVCache).
       def backward_depth(
         results : Array(BatchedDepthForward::NodeResult),
         loss_grads : Array(Mat),
         grad_accums : Hash(Int32, NodeGradAccum),
         kv_store : NodeKVStore,
         model : MiniGPT,
-        corpus : TrieCorpus
+        corpus : TrieCorpus,
+        forward_caches : Hash(Int32, Array(LayerKVCache))? = nil
       )
         return if results.empty?
 
@@ -154,20 +157,17 @@ module MicroGPT
 
             accum = grad_accums[result.node_id]? || NodeGradAccum.new(n_layers, head_dims)
 
-            # Reconstruct single-layer KV cache for this node
-            layer_cache = kv_store.reconstruct_layer_cache(
-              result.node_id, corpus, li, head_dims, seq_len
-            )
-            # Extend with this node's own K/V (stored in kv_store)
-            node_kv = kv_store.entries[result.node_id]
-            k_parts_node = Array(Mat).new(n_heads)
-            v_parts_node = Array(Mat).new(n_heads)
-            n_heads.times do |hi|
-              k_row, v_row = node_kv[li][hi]
-              k_parts_node << k_row
-              v_parts_node << v_row
+            # Reuse KV cache from forward pass if available (fast path),
+            # otherwise reconstruct from kv_store (slow path).
+            layer_cache = if fc = forward_caches
+              if node_caches = fc[result.node_id]?
+                node_caches[li]  # already includes this node's K/V
+              else
+                reconstruct_node_layer_cache(result.node_id, li, kv_store, corpus, head_dims, seq_len, n_heads)
+              end
+            else
+              reconstruct_node_layer_cache(result.node_id, li, kv_store, corpus, head_dims, seq_len, n_heads)
             end
-            layer_cache.extend(k_parts_node, v_parts_node)
 
             col_offset = 0
             n_heads.times do |hi|
@@ -268,6 +268,20 @@ module MicroGPT
       end
 
       # --- Helpers ---
+
+      private def reconstruct_node_layer_cache(node_id, li, kv_store, corpus, head_dims, seq_len, n_heads)
+        layer_cache = kv_store.reconstruct_layer_cache(node_id, corpus, li, head_dims, seq_len)
+        node_kv = kv_store.entries[node_id]
+        k_parts_node = Array(Mat).new(n_heads)
+        v_parts_node = Array(Mat).new(n_heads)
+        n_heads.times do |hi|
+          k_row, v_row = node_kv[li][hi]
+          k_parts_node << k_row
+          v_parts_node << v_row
+        end
+        layer_cache.extend(k_parts_node, v_parts_node)
+        layer_cache
+      end
 
       private def copy_mat(m : Mat) : Mat
         result = Mat.new(m.rows, m.cols)
