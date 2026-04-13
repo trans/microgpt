@@ -38,7 +38,7 @@ d_model → d_ff → d_model. At d_model=64 this keeps the parameter count low
 
 ### Memory Protection
 
-- `Mat` tracks global allocated bytes with a configurable cap (default 2 GiB).
+- `Mat` tracks global allocated bytes with a configurable cap (default 3 GiB).
   Raises with a detailed message before exceeding the limit.
 - `GC.collect` runs every 10 training steps to reclaim intermediate matrices.
 - `just run` wraps execution with `ulimit -v` (default 8 GiB) as an OS-level
@@ -46,24 +46,81 @@ d_model → d_ff → d_model. At d_model=64 this keeps the parameter count low
 
 ## Usage
 
-```
-microgpt <text_file> [steps] [head_type] [backend] [seq_len]
-```
+The CLI uses a JSON schema for arguments. All flags use `--flag value` syntax.
 
-- **text_file** — input text (e.g. `data/input.txt`)
-- **steps** — training steps (default 1000)
-- **head_type** — `uniform`, `exponential`, `prime`, `pyramid`, `ones`
-- **backend** — `crystal`, `openblas`, `cublas`
-- **seq_len** — sequence length (default 128)
+### Window Training (standard)
 
 ```sh
-# Quick test
-just build-release
-just run data/input.txt 1000 uniform openblas 32
+# Quick training run
+./bin/microgpt data/input.txt --steps 2000 --d-model 64 --n-layers 2 --seq-len 32
 
-# Benchmarks
-just bench 100
+# With held-out validation
+./bin/microgpt data/input.txt --steps 5000 --d-model 64 --n-layers 2 --seq-len 32 \
+  --val-tokens 5000 --val-interval 30
+
+# GPU accelerated
+./bin/microgpt data/input.txt --steps 5000 --d-model 64 --n-layers 2 --seq-len 32 \
+  --backend cublas
+
+# Other options
+--seed 42              # reproducible init
+--lr 0.0003            # learning rate (default 0.0003)
+--no-save              # don't save checkpoint
+--model path.model     # save/load checkpoint path
 ```
+
+### AGPT Training (trie-walk)
+
+Trains on a prefix trie of the corpus. Shared prefixes are computed once.
+
+```sh
+# Basic AGPT run
+./bin/microgpt data/input.txt --steps 10 --d-model 32 --n-layers 1 --seq-len 16 \
+  --agpt --agpt-max-starts 2000
+
+# With held-out validation (for comparison with window training)
+./bin/microgpt data/input.txt --steps 20 --d-model 32 --n-layers 1 --seq-len 16 \
+  --agpt --agpt-max-starts 2000 --val-tokens 5000 --val-interval 10
+
+# AGPT-specific options
+--agpt                     # enable AGPT trie-walk mode
+--agpt-max-starts 2000     # number of corpus start positions (0 = all)
+--agpt-start-offset 0      # deterministic offset for start positions
+--agpt-progress 1000       # print trie build progress every N starts
+--agpt-save-index path.idx # save built trie index to disk
+--agpt-load-index path.idx # load previously saved trie index
+--build-only               # build/report trie without training
+```
+
+**AGPT terminology:**
+- **steps** = number of epochs (full trie traversals)
+- **epoch** = one forward pass over all trie nodes + backward + weight updates
+- **starts** = number of corpus positions used to build the trie (more starts = more prefix sharing but slower)
+
+### Comparison Runs
+
+To compare AGPT vs window training fairly, use the same model config, seed, and held-out split:
+
+```sh
+# Window baseline
+./bin/microgpt data/input.txt --steps 5000 --d-model 32 --n-layers 1 --seq-len 16 \
+  --val-tokens 5000 --val-interval 10 --seed 42 --no-save > window.log 2>&1
+
+# AGPT comparison
+./bin/microgpt data/input.txt --steps 20 --d-model 32 --n-layers 1 --seq-len 16 \
+  --val-tokens 5000 --val-interval 10 --seed 42 --no-save \
+  --agpt --agpt-max-starts 2000 > agpt.log 2>&1
+
+# Extract held-out CE curves (plot wall-clock vs held_out_ce)
+grep '\[val\]' window.log
+grep '\[val\]' agpt.log
+```
+
+### Backends
+
+- `crystal` — pure Crystal CPU (default, no dependencies)
+- `openblas` — CPU with OpenBLAS acceleration
+- `cublas` — GPU via cuBLAS + custom CUDA kernels (requires NVIDIA GPU + CUDA toolkit)
 
 ## Building
 
