@@ -152,6 +152,11 @@ module MicroGPT
         "type": "string",
         "description": "Load a previously saved AGPT trie index from this path"
       },
+      "agpt-epochs-per-trie": {
+        "type": "integer",
+        "description": "AGPT: epochs per trie before rotating start offset (0 = no rotation)",
+        "default": 0
+      },
       "val-tokens": {
         "type": "integer",
         "description": "Hold out the last N tokens of the corpus as a validation set (0 = off)",
@@ -281,6 +286,7 @@ module MicroGPT
       agpt_max_starts = result["agpt-max-starts"].as_i64.to_i
       agpt_start_offset = result["agpt-start-offset"].as_i64.to_i
       agpt_progress = result["agpt-progress"].as_i64.to_i
+      agpt_epochs_per_trie = result["agpt-epochs-per-trie"].as_i64.to_i
       agpt_save_index = result["agpt-save-index"]?.try(&.as_s)
       agpt_load_index = result["agpt-load-index"]?.try(&.as_s)
       val_size     = result["val-tokens"].as_i64.to_i
@@ -855,10 +861,36 @@ module MicroGPT
         last_val_step = step
       }
 
-      # AGPT trie-walk mode: each "step" is a full BFS epoch over the trie
+      # AGPT trie-walk mode: each "step" is a full BFS epoch over the trie.
+      # When --agpt-epochs-per-trie > 0, rotate start offset after that many
+      # epochs to cover more corpus with less redundant re-traversal.
       if walk_trainer = agpt_walk_trainer
         emit_val.call(0)
+        current_offset = agpt_start_offset
+        rotation_stride = agpt_max_starts > 0 ? agpt_max_starts : 1
+        max_starts_val = agpt_max_starts > 0 ? agpt_max_starts : nil
+        train_size_total = train_tokens.size
+
         steps.times do |step|
+          # Rotate trie after epochs_per_trie epochs (if enabled)
+          if agpt_epochs_per_trie > 0 && step > 0 && step % agpt_epochs_per_trie == 0
+            current_offset = (current_offset + rotation_stride) % Math.max(train_size_total - 1, 1)
+            rotate_start = Time.instant
+            trie = AGPT::TrieCorpus.from_token_ids(
+              train_tokens,
+              max_depth: config.seq_len,
+              max_starts: max_starts_val,
+              start_offset: current_offset,
+              progress_interval: 0,
+              vocab_size: dataset.vocab_size,
+              corpus_hash: corpus_hash,
+              tokenizer_tag: AGPT_TOKENIZER_TAG
+            )
+            walk_trainer = AGPT::TrieWalkTrainer.new(trie)
+            rotate_ms = (Time.instant - rotate_start).total_milliseconds
+            puts "  [rotate] offset=#{current_offset} nodes=#{trie.node_count} build=#{rotate_ms.round(1)}ms"
+          end
+
           MicroGPT::PerfTrace.reset if MicroGPT::PerfTrace.enabled?
           epoch_started = Time.instant
           loss, nodes = walk_trainer.train_epoch(model)
