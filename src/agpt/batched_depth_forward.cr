@@ -188,14 +188,23 @@ module MicroGPT
                 this_depth_caches
               )
             else
-              # CPU path: per-node with incremental parent caches
+              # CPU path: grouped by parent (siblings share K/V prefix)
               attn_outputs = Mat.new(n, d_model)
-              cpu_per_node_attention(
-                nodes, n, li, head_dims, n_heads, d_model, seq_len,
-                q_parts, node_k_rows, node_v_rows,
-                kv_store, corpus, parent_caches,
-                attn_outputs, per_node_attn_weights, this_depth_caches
-              )
+              if ENV["AGPT_ATTN"]? == "per_node"
+                cpu_per_node_attention(
+                  nodes, n, li, head_dims, n_heads, d_model, seq_len,
+                  q_parts, node_k_rows, node_v_rows,
+                  kv_store, corpus, parent_caches,
+                  attn_outputs, per_node_attn_weights, this_depth_caches
+                )
+              else
+                cpu_grouped_attention(
+                  nodes, n, li, head_dims, n_heads, d_model, seq_len,
+                  q_parts, node_k_rows, node_v_rows,
+                  kv_store, corpus, parent_caches,
+                  attn_outputs, per_node_attn_weights, this_depth_caches
+                )
+              end
             end
             MicroGPT::PerfTrace.add_time("agpt.forward.layer#{li}.attention", Time.instant - attention_started.not_nil!) if attention_started
 
@@ -496,6 +505,150 @@ module MicroGPT
       end
 
       # CPU path: per-node attention with incremental parent caches
+      # Grouped attention: siblings with the same parent share K/V for positions
+      # 0..d-1 and differ only at position d (their own token). Batch the shared
+      # part into [C, d_prefix] matmuls per group; handle self-position per node.
+      #
+      # Produces per-sibling outputs and weights identical to cpu_per_node_attention
+      # up to float32 ordering, so backward (which reads per-node attn_weights)
+      # works unchanged.
+      private def cpu_grouped_attention(
+        nodes, n, li, head_dims, n_heads, d_model, seq_len,
+        q_parts, node_k_rows, node_v_rows,
+        kv_store, corpus, parent_caches,
+        attn_outputs, per_node_attn_weights, this_depth_caches
+      )
+        # Build per_node_attn_weights with None placeholders so we can write
+        # by index (groups process out of natural node order)
+        n.times { per_node_attn_weights << Array(Mat).new(n_heads) }
+
+        # Group node indices by parent id, preserving the iteration order
+        groups = Hash(Int32, Array(Int32)).new
+        n.times do |i|
+          pid = nodes[i].parent.not_nil!.id
+          (groups[pid] ||= [] of Int32) << i
+        end
+
+        groups.each do |parent_id, idxs|
+          # Resolve parent K/V cache (read-only — we do NOT extend it)
+          parent_layer_cache = nil.as(LayerKVCache?)
+          if pc = parent_caches
+            if pcs = pc[parent_id]?
+              parent_layer_cache = pcs[li]
+            end
+          end
+          if parent_layer_cache.nil?
+            # Fallback: reconstruct parent's cache via any child's node_id
+            # (reconstruct_layer_cache builds the parent chain excluding the node itself)
+            first_node_id = nodes[idxs[0]].id
+            parent_layer_cache = kv_store.reconstruct_layer_cache(
+              first_node_id, corpus, li, head_dims, seq_len
+            )
+          end
+          parent_layer_cache = parent_layer_cache.not_nil!
+
+          c = idxs.size
+          prefix_len = parent_layer_cache.len
+
+          # Per-head grouped attention
+          col_offset = 0
+          n_heads.times do |hi|
+            hd = head_dims[hi]
+            scale = (1.0 / Math.sqrt(hd.to_f64)).to_f32
+
+            # Gather Q for this group: [C, hd]
+            q_group = Mat.new(c, hd)
+            c.times do |k|
+              row = idxs[k]
+              hd.times { |j| q_group[k, j] = q_parts[hi][row, j] }
+            end
+
+            # Scores at prefix positions 0..prefix_len-1: [C, prefix_len]
+            # Shared across siblings — one matmul
+            scores = if prefix_len > 0
+              k_prefix = parent_layer_cache.k_slice(hi)  # [prefix_len, hd]
+              q_group * k_prefix.t                        # [C, prefix_len]
+            else
+              Mat.new(c, 0)
+            end
+
+            # Self scores at position prefix_len: one per sibling
+            self_scores = Array(Float32).new(c)
+            c.times do |k|
+              row = idxs[k]
+              k_self = node_k_rows[row][hi]  # [1, hd]
+              dot = 0.0_f32
+              hd.times { |j| dot += q_group[k, j] * k_self[0, j] }
+              self_scores << dot
+            end
+
+            # Full scores: [C, prefix_len + 1], scaled
+            full_len = prefix_len + 1
+            full_scores = Mat.new(c, full_len)
+            c.times do |k|
+              prefix_len.times { |p| full_scores[k, p] = scores[k, p] * scale }
+              full_scores[k, prefix_len] = self_scores[k] * scale
+            end
+
+            # Softmax per row → [C, full_len]
+            weights = MicroGPT.backend.softmax_rows(full_scores)
+
+            # Weighted sum for output: weights[:, 0:prefix_len] × V_prefix
+            #   + weights[:, prefix_len] * V_self_i per sibling
+            if prefix_len > 0
+              v_prefix = parent_layer_cache.v_slice(hi)  # [prefix_len, hd]
+              # split weights into prefix and self parts
+              w_prefix = Mat.new(c, prefix_len)
+              c.times do |k|
+                prefix_len.times { |p| w_prefix[k, p] = weights[k, p] }
+              end
+              out_prefix = w_prefix * v_prefix  # [C, hd]
+
+              c.times do |k|
+                row = idxs[k]
+                v_self = node_v_rows[row][hi]
+                w_self = weights[k, prefix_len]
+                hd.times do |j|
+                  attn_outputs[row, col_offset + j] = out_prefix[k, j] + w_self * v_self[0, j]
+                end
+              end
+            else
+              # prefix_len == 0 (root's children): attention is just self
+              c.times do |k|
+                row = idxs[k]
+                v_self = node_v_rows[row][hi]
+                w_self = weights[k, 0]
+                hd.times { |j| attn_outputs[row, col_offset + j] = w_self * v_self[0, j] }
+              end
+            end
+
+            # Save per-sibling attention weights as [1, full_len] Mats
+            c.times do |k|
+              row = idxs[k]
+              w_row = Mat.new(1, full_len)
+              full_len.times { |p| w_row[0, p] = weights[k, p] }
+              per_node_attn_weights[row] << w_row
+            end
+
+            col_offset += hd
+          end
+
+          # For each sibling, this_depth_caches[node_id] = parent_cache extended by this sibling's K/V
+          # We need a separate layer_cache per sibling for the NEXT depth level.
+          c.times do |k|
+            row = idxs[k]
+            nid = nodes[row].id
+            sibling_cache = if c > 1
+              parent_layer_cache.deep_clone
+            else
+              parent_layer_cache  # unary — can share (future extensions are in-place)
+            end
+            sibling_cache.extend(node_k_rows[row], node_v_rows[row])
+            this_depth_caches[nid] << sibling_cache
+          end
+        end
+      end
+
       private def cpu_per_node_attention(
         nodes, n, li, head_dims, n_heads, d_model, seq_len,
         q_parts, node_k_rows, node_v_rows,
