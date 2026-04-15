@@ -87,7 +87,215 @@ module MicroGPT
         model : MiniGPT,
         corpus : TrieCorpus
       ) : {Array(NodeResult), Array(LayerKVCache)}
-        raise NotImplementedError.new("forward_unary_chain is scaffold-only; see comment block above for implementation plan")
+        l = chain_nodes.size
+        raise ArgumentError.new("forward_unary_chain: empty chain") if l == 0
+
+        d_model = model.config.d_model
+        head_dims = model.blocks.first.attn.head_dims
+        n_layers = model.config.n_layers
+        n_heads = head_dims.size
+
+        tokens = chain_nodes.map { |n| n.token_id.not_nil! }
+        # Position for chain[i] = absolute depth - 1 = (start_depth + i) - 1
+        positions = Array(Int32).new(l) { |i| start_depth + i - 1 }
+
+        # --- Embedding [L, d_model] ---
+        x = Mat.new(l, d_model)
+        l.times do |i|
+          d_model.times { |j| x[i, j] = model.embedding.token_emb[tokens[i], j] }
+        end
+
+        all_block_states = Array(Array(BlockStepState)).new(l) { [] of BlockStepState }
+        extended_cache = Array(LayerKVCache).new(n_layers)
+
+        n_layers.times do |li|
+          block = model.blocks[li]
+          attn = block.attn
+          parent_layer_cache = parent_cache[li]
+          prefix_len = parent_layer_cache.len
+
+          x_input = copy_mat(x)
+
+          x_norm, ln1_norm, ln1_std_inv = MicroGPT.backend.layer_norm_forward(x, block.ln1.gamma, block.ln1.beta)
+          ln1_out = copy_mat(x_norm)
+
+          q_all = x_norm * attn.wq.w
+          add_bias_rows!(q_all, attn.wq.b)
+          k_all = x_norm * attn.wk.w
+          add_bias_rows!(k_all, attn.wk.b)
+          v_all = x_norm * attn.wv.w
+          add_bias_rows!(v_all, attn.wv.b)
+
+          q_parts = split_cols(q_all, head_dims)
+          k_parts = split_cols(k_all, head_dims)
+          v_parts = split_cols(v_all, head_dims)
+
+          # RoPE per head at each position's absolute depth
+          n_heads.times do |hi|
+            l.times do |i|
+              apply_rope_row!(q_parts[hi], i, attn.ropes[hi], positions[i])
+              apply_rope_row!(k_parts[hi], i, attn.ropes[hi], positions[i])
+            end
+          end
+
+          # Store per-position K/V into kv_store and build extended layer cache
+          layer_cache = parent_layer_cache.deep_clone
+          l.times do |i|
+            k_row_parts = Array(Mat).new(n_heads)
+            v_row_parts = Array(Mat).new(n_heads)
+            n_heads.times do |hi|
+              hd = head_dims[hi]
+              k_row = Mat.new(1, hd)
+              v_row = Mat.new(1, hd)
+              hd.times do |j|
+                k_row[0, j] = k_parts[hi][i, j]
+                v_row[0, j] = v_parts[hi][i, j]
+              end
+              k_row_parts << k_row
+              v_row_parts << v_row
+            end
+            kv_store.store_layer(chain_nodes[i].id, li, k_row_parts, v_row_parts)
+            layer_cache.extend(k_row_parts, v_row_parts)
+          end
+          extended_cache << layer_cache
+
+          # --- Per-position causal attention over (parent prefix + chain so far) ---
+          attn_outputs = Mat.new(l, d_model)
+          per_pos_attn_weights = Array(Array(Mat)).new(l) { Array(Mat).new(n_heads) }
+
+          col_offset = 0
+          n_heads.times do |hi|
+            hd = head_dims[hi]
+            scale = (1.0 / Math.sqrt(hd.to_f64)).to_f32
+
+            full_len_max = prefix_len + l
+            k_full = Mat.new(full_len_max, hd)
+            v_full = Mat.new(full_len_max, hd)
+            if prefix_len > 0
+              kp = parent_layer_cache.k_slice(hi)
+              vp = parent_layer_cache.v_slice(hi)
+              prefix_len.times do |r|
+                hd.times do |j|
+                  k_full[r, j] = kp[r, j]
+                  v_full[r, j] = vp[r, j]
+                end
+              end
+            end
+            l.times do |i|
+              hd.times do |j|
+                k_full[prefix_len + i, j] = k_parts[hi][i, j]
+                v_full[prefix_len + i, j] = v_parts[hi][i, j]
+              end
+            end
+
+            l.times do |i|
+              eff_len = prefix_len + i + 1
+              q_row = Mat.new(1, hd)
+              hd.times { |j| q_row[0, j] = q_parts[hi][i, j] }
+
+              k_eff = Mat.new(eff_len, hd)
+              v_eff = Mat.new(eff_len, hd)
+              eff_len.times do |r|
+                hd.times do |j|
+                  k_eff[r, j] = k_full[r, j]
+                  v_eff[r, j] = v_full[r, j]
+                end
+              end
+
+              scores = q_row * k_eff.t
+              scores.scale!(scale)
+              weights = MicroGPT.backend.softmax_rows(scores)
+              out = weights * v_eff
+
+              hd.times { |j| attn_outputs[i, col_offset + j] = out[0, j] }
+              per_pos_attn_weights[i] << copy_mat(weights)
+            end
+
+            col_offset += hd
+          end
+
+          # WO + residual 1
+          wo_input = copy_mat(attn_outputs)
+          attn_proj = attn_outputs * attn.wo.w
+          add_bias_rows!(attn_proj, attn.wo.b)
+          x.add!(attn_proj)
+          x_after_attn = copy_mat(x)
+
+          # LN2
+          x_norm2, ln2_norm, ln2_std_inv = MicroGPT.backend.layer_norm_forward(x, block.ln2.gamma, block.ln2.beta)
+          ln2_out = copy_mat(x_norm2)
+
+          # FFN L1 + ReLU
+          h = x_norm2 * block.ff.l1.w
+          if MicroGPT.backend.is_a?(MicroGPT::CuBLASBackend)
+            h, ff_relu_mask = MicroGPT.backend.fused_bias_relu(h, block.ff.l1.b)
+          else
+            add_bias_rows!(h, block.ff.l1.b)
+            ff_relu_mask = Mat.new(h.rows, h.cols)
+            h.rows.times do |r|
+              h.cols.times do |c|
+                ff_relu_mask[r, c] = h[r, c] > 0 ? 1.0_f32 : 0.0_f32
+                h[r, c] *= ff_relu_mask[r, c]
+              end
+            end
+          end
+          ff_relu_out = copy_mat(h)
+
+          # FFN L2 + residual 2
+          ff_out = h * block.ff.l2.w
+          add_bias_rows!(ff_out, block.ff.l2.b)
+          x.add!(ff_out)
+
+          # Per-position BlockStepState
+          l.times do |i|
+            bss = BlockStepState.new(
+              x_input: extract_row(x_input, i),
+              ln1_out: extract_row(ln1_out, i),
+              ln1_normed: extract_row(ln1_norm, i),
+              ln1_std_inv: ln1_std_inv[i, 0].to_f64,
+              q_parts: head_dims.map_with_index { |_, hi| extract_row_slice(q_parts[hi], i) },
+              attn_weights: per_pos_attn_weights[i],
+              wo_input: extract_row(wo_input, i),
+              x_after_attn: extract_row(x_after_attn, i),
+              ln2_out: extract_row(ln2_out, i),
+              ln2_normed: extract_row(ln2_norm, i),
+              ln2_std_inv: ln2_std_inv[i, 0].to_f64,
+              ff_relu_out: extract_row(ff_relu_out, i),
+              ff_relu_mask: extract_row(ff_relu_mask, i)
+            )
+            all_block_states[i] << bss
+          end
+        end
+
+        # --- Final norm + output projection (batched over L) ---
+        final_x = copy_mat(x)
+        final_out, final_norm, final_std_inv = MicroGPT.backend.layer_norm_forward(
+          x, model.final_norm.gamma, model.final_norm.beta
+        )
+        final_norm_out = copy_mat(final_out)
+
+        logits = final_out * model.output.proj.w
+        add_bias_rows!(logits, model.output.proj.b)
+
+        results = Array(NodeResult).new(l)
+        running_ancestors = ancestor_ids_base.dup
+        l.times do |i|
+          running_ancestors = running_ancestors + [chain_nodes[i].id]
+          results << NodeResult.new(
+            node_id: chain_nodes[i].id,
+            logits: extract_row(logits, i),
+            block_states: all_block_states[i],
+            final_x: extract_row(final_x, i),
+            final_normed: extract_row(final_norm, i),
+            final_std_inv: final_std_inv[i, 0].to_f64,
+            final_norm_out: extract_row(final_norm_out, i),
+            token_id: tokens[i],
+            position: positions[i],
+            ancestor_ids: running_ancestors.dup
+          )
+        end
+
+        {results, extended_cache}
       end
 
       # Forward all nodes at one depth level.

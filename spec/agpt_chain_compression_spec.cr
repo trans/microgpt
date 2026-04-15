@@ -161,25 +161,82 @@ describe "AGPT unary chain compression reference" do
     end
   end
 
-  # When chain-compressed forward is implemented, uncomment this and point it at
-  # the new path. The contract: same per-node outputs to float32 tolerance.
-  pending "chain-compressed forward reproduces reference snapshot" do
-    # MicroGPT.use_crystal!
-    # model = make_deterministic_model
-    # reference = reference_snapshot(model)
-    # compressed = chain_compressed_snapshot(model)
-    #
-    # reference.size.should eq compressed.size
-    # reference.each do |node_id, expected|
-    #   actual = compressed[node_id]
-    #   assert_close(actual.logits, expected.logits, 1e-4_f32, "logits node=#{node_id}")
-    #   assert_close(actual.final_x, expected.final_x, 1e-5_f32, "final_x node=#{node_id}")
-    #   expected.k_rows.each_with_index { |row, li|
-    #     assert_close(actual.k_rows[li], row, 1e-5_f32, "k node=#{node_id} head=#{li}")
-    #   }
-    #   expected.v_rows.each_with_index { |row, li|
-    #     assert_close(actual.v_rows[li], row, 1e-5_f32, "v node=#{node_id} head=#{li}")
-    #   }
-    # end
+  it "chain-compressed forward reproduces reference snapshot" do
+    MicroGPT.use_crystal!
+    model = make_deterministic_model
+    reference = reference_snapshot(model)
+    compressed = chain_compressed_snapshot(model)
+
+    reference.size.should eq compressed.size
+    reference.each do |node_id, expected|
+      actual = compressed[node_id]
+      assert_close(actual.logits, expected.logits, 1e-4_f32, "logits node=#{node_id}")
+      assert_close(actual.final_x, expected.final_x, 1e-5_f32, "final_x node=#{node_id}")
+      expected.k_rows.each_with_index do |row, li|
+        assert_close(actual.k_rows[li], row, 1e-5_f32, "k node=#{node_id} head=#{li}")
+      end
+      expected.v_rows.each_with_index do |row, li|
+        assert_close(actual.v_rows[li], row, 1e-5_f32, "v node=#{node_id} head=#{li}")
+      end
+    end
   end
+end
+
+# Build the same trie used in reference_snapshot, walk it via segments, and
+# produce per-node snapshots through forward_unary_chain.
+private def chain_compressed_snapshot(model : MicroGPT::MiniGPT) : Hash(Int32, NodeSnapshot)
+  token_ids = [0, 1, 2, 3, 4, 5, 6, 7] of Int32
+  corpus = MicroGPT::AGPT::TrieCorpus.from_token_ids(
+    token_ids, max_depth: 6, max_starts: 1, vocab_size: 8
+  )
+  kv_store = MicroGPT::AGPT::NodeKVStore.new
+  head_dims = model.blocks.first.attn.head_dims
+  n_layers = model.config.n_layers
+  n_heads = head_dims.size
+  seq_len = model.config.seq_len
+
+  node_caches = {} of Int32 => Array(MicroGPT::AGPT::LayerKVCache)
+  node_caches[corpus.root.id] = Array.new(n_layers) {
+    MicroGPT::AGPT::LayerKVCache.new(head_dims, seq_len)
+  }
+  node_ancestors = {corpus.root.id => [] of Int32}
+  snapshots = {} of Int32 => NodeSnapshot
+
+  corpus.each_segment_group do |depth, segments|
+    segments.each do |seg|
+      parent_cache = node_caches[seg.parent_id]
+      ancestor_ids_base = node_ancestors[seg.parent_id]
+      chain_nodes = seg.node_ids.map { |id| corpus.node_for_id(id) }
+
+      results, ext_cache = MicroGPT::AGPT::BatchedDepthForward.forward_unary_chain(
+        chain_nodes, parent_cache, ancestor_ids_base, depth,
+        kv_store, model, corpus
+      )
+
+      last_id = seg.node_ids.last
+      node_caches[last_id] = ext_cache
+      node_ancestors[last_id] = ancestor_ids_base + seg.node_ids
+
+      results.each do |result|
+        logits = Array(Float32).new(result.logits.cols) { |j| result.logits[0, j] }
+        final_x = Array(Float32).new(result.final_x.cols) { |j| result.final_x[0, j] }
+        entry = kv_store.entries[result.node_id]
+        k_rows = Array(Array(Float32)).new(n_layers * n_heads)
+        v_rows = Array(Array(Float32)).new(n_layers * n_heads)
+        n_layers.times do |li|
+          n_heads.times do |hi|
+            k, v = entry[li][hi]
+            hd = head_dims[hi]
+            k_rows << Array(Float32).new(hd) { |j| k[0, j] }
+            v_rows << Array(Float32).new(hd) { |j| v[0, j] }
+          end
+        end
+        snapshots[result.node_id] = NodeSnapshot.new(
+          logits: logits, final_x: final_x, k_rows: k_rows, v_rows: v_rows
+        )
+      end
+    end
+  end
+
+  snapshots
 end
