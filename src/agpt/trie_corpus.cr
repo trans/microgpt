@@ -350,6 +350,75 @@ module MicroGPT
         )
       end
 
+      # A chain segment: a sequence of consecutive nodes where each has exactly
+      # one child (plus the segment's tail, which may have zero or >1 children).
+      # Segment heads are either root's children or children of branching nodes.
+      # A chain of length 1 is a "trivial" segment (either branching or leaf).
+      record Segment,
+        id : Int32,
+        node_ids : Array(Int32),    # ordered shallowest → deepest
+        start_depth : Int32,         # depth of node_ids[0]
+        parent_id : Int32            # id of parent (of node_ids[0]), -1 if root
+
+      # Partition all non-root nodes into segments.
+      # Unary chains become single segments of length > 1.
+      # Branching nodes' children each start new segments.
+      def build_segments : Array(Segment)
+        segments = [] of Segment
+        next_id = 0
+
+        # Walk trie from root's children; each branching child starts a segment.
+        # Use BFS to enumerate in topological order.
+        pending = [] of Int32  # node ids that start new segments
+        each_child_of(0) do |_, cid|
+          pending << cid
+        end
+
+        until pending.empty?
+          head = pending.shift
+          chain = [head]
+          current = head
+
+          # Extend chain while current has exactly one child
+          while @child_count[current] == 1
+            child_id = -1
+            each_child_of(current) { |_, cid| child_id = cid }
+            break if child_id == -1
+            chain << child_id
+            current = child_id
+          end
+
+          # The chain's tail has either 0 children (leaf) or >1 (branching).
+          # If branching, each child starts a new segment.
+          if @child_count[current] > 1
+            each_child_of(current) { |_, cid| pending << cid }
+          end
+
+          segments << Segment.new(
+            id: next_id,
+            node_ids: chain,
+            start_depth: @depths[head],
+            parent_id: @parents[head]
+          )
+          next_id += 1
+        end
+
+        segments
+      end
+
+      # Yield segments in topological order (parent segments before child segments).
+      # Groups segments by start_depth so a batch of independent segments can be
+      # processed together.
+      def each_segment_group(& : {Int32, Array(Segment)} ->)
+        segments = build_segments
+        by_depth = Hash(Int32, Array(Segment)).new { |h, k| h[k] = [] of Segment }
+        segments.each { |s| by_depth[s.start_depth] << s }
+        depths = by_depth.keys.sort
+        depths.each do |depth|
+          yield({depth, by_depth[depth]})
+        end
+      end
+
       def each_depth_level(& : {Int32, Array(TrieNode)} ->)
         current_level = [root]
         depth = 0
