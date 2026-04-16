@@ -938,6 +938,155 @@ extern "C" void cuda_unpack_batched_attn_output(
 }
 
 // =============================================================================
+// Batched variable-length attention BACKWARD
+// =============================================================================
+//
+// Mirror of cuda_batched_varlen_attention. Takes saved forward state
+// (Q, K, V, attn_weights) and upstream d_out; produces dq, dk_full, dv_full.
+//
+// For each (node, head) pair:
+//   d_weights[p] = Σ_j d_out[j] * V[p, j]
+//   dot = Σ_p attn_weights[p] * d_weights[p]
+//   d_scores[p] = attn_weights[p] * (d_weights[p] - dot) * scale
+//   dq[j] = Σ_p d_scores[p] * K[p, j]
+//   dk[p, j] = d_scores[p] * q[j]
+//   dv[p, j] = attn_weights[p] * d_out[j]
+//
+// Layout matches forward kernel exactly:
+//   q_packed [N * n_heads, head_dim]
+//   k_packed, v_packed [total_kv, head_dim] (heads interleaved at each kv position)
+//   attn_weights [N * n_heads * max_len]
+//   d_out [N * n_heads, head_dim]
+//   dq [N * n_heads, head_dim]
+//   dk_full, dv_full [total_kv, head_dim]
+
+__global__ void batched_varlen_attn_backward_kernel(
+    const float* q_packed,      // [N * n_heads, head_dim]
+    const float* k_packed,      // [total_kv, head_dim] (heads interleaved per pos)
+    const float* v_packed,      // [total_kv, head_dim]
+    const float* attn_weights,  // [N * n_heads * max_len]
+    const float* d_out,         // [N * n_heads, head_dim]
+    const int*   kv_offsets,    // [N]
+    const int*   kv_lengths,    // [N]
+    float*       dq,            // [N * n_heads, head_dim]
+    float*       dk_full,       // [total_kv, head_dim]
+    float*       dv_full,       // [total_kv, head_dim]
+    int n_nodes,
+    int n_heads,
+    int head_dim,
+    int max_len,
+    float scale
+) {
+    int block_id = blockIdx.x;
+    int node = block_id / n_heads;
+    int head = block_id % n_heads;
+    int tid = threadIdx.x;
+    int nthreads = blockDim.x;
+
+    if (node >= n_nodes) return;
+
+    int prefix_len = kv_lengths[node];
+    int kv_off = kv_offsets[node];
+    int q_row = node * n_heads + head;
+    int w_off = q_row * max_len;
+
+    const float* q = q_packed + q_row * head_dim;
+    const float* d_o = d_out + q_row * head_dim;
+    const float* w = attn_weights + w_off;
+    float* dq_row = dq + q_row * head_dim;
+
+    extern __shared__ float sdata[];
+    // Layout: [max_len] for d_weights (also reused for d_scores),
+    //         [nthreads] for reduction.
+    float* d_weights = sdata;
+    float* reduce_buf = sdata + max_len;
+
+    // Step 1: d_weights[p] = Σ_j d_out[j] * V[p, j]
+    for (int p = tid; p < prefix_len; p += nthreads) {
+        const float* v_p = v_packed + ((kv_off + p) * n_heads + head) * head_dim;
+        float acc = 0.0f;
+        for (int j = 0; j < head_dim; j++) {
+            acc += d_o[j] * v_p[j];
+        }
+        d_weights[p] = acc;
+    }
+    __syncthreads();
+
+    // Step 2: dot = Σ_p w[p] * d_weights[p]  (block-wide reduction)
+    float local_dot = 0.0f;
+    for (int p = tid; p < prefix_len; p += nthreads) {
+        local_dot += w[p] * d_weights[p];
+    }
+    reduce_buf[tid] = local_dot;
+    __syncthreads();
+    for (int s = nthreads / 2; s > 0; s >>= 1) {
+        if (tid < s) reduce_buf[tid] += reduce_buf[tid + s];
+        __syncthreads();
+    }
+    float dot = reduce_buf[0];
+
+    // Step 3: d_scores[p] = w[p] * (d_weights[p] - dot) * scale
+    // (overwrite d_weights in-place with d_scores)
+    for (int p = tid; p < prefix_len; p += nthreads) {
+        d_weights[p] = w[p] * (d_weights[p] - dot) * scale;
+    }
+    __syncthreads();
+
+    // Step 4: dq[j] = Σ_p d_scores[p] * K[p, j]
+    for (int j = tid; j < head_dim; j += nthreads) {
+        float acc = 0.0f;
+        for (int p = 0; p < prefix_len; p++) {
+            const float* k_p = k_packed + ((kv_off + p) * n_heads + head) * head_dim;
+            acc += d_weights[p] * k_p[j];
+        }
+        dq_row[j] = acc;
+    }
+
+    // Step 5: dk[p, j] = d_scores[p] * q[j],  dv[p, j] = w[p] * d_out[j]
+    // Note: if multiple nodes share the same (kv_off + p) position (siblings
+    // sharing ancestor), this WRITES (not atomicAdd) — caller must ensure
+    // per-node kv regions are disjoint, OR use the unified packed layout
+    // where shared prefix K/V positions have ONE owner.
+    for (int p = tid; p < prefix_len; p += nthreads) {
+        float* dk_p = dk_full + ((kv_off + p) * n_heads + head) * head_dim;
+        float* dv_p = dv_full + ((kv_off + p) * n_heads + head) * head_dim;
+        float ds = d_weights[p];
+        float wp = w[p];
+        for (int j = 0; j < head_dim; j++) {
+            dk_p[j] = ds * q[j];
+            dv_p[j] = wp * d_o[j];
+        }
+    }
+}
+
+extern "C" void cuda_batched_varlen_attention_backward(
+    const float* q_packed,
+    const float* k_packed,
+    const float* v_packed,
+    const float* attn_weights,
+    const float* d_out,
+    const int*   kv_offsets,
+    const int*   kv_lengths,
+    float*       dq,
+    float*       dk_full,
+    float*       dv_full,
+    int n_nodes,
+    int n_heads,
+    int head_dim,
+    int max_len,
+    float scale
+) {
+    int blocks = n_nodes * n_heads;
+    int threads = (head_dim < 128) ? 32 : 128;
+    int smem = (max_len + threads) * sizeof(float);
+    batched_varlen_attn_backward_kernel<<<blocks, threads, smem>>>(
+        q_packed, k_packed, v_packed, attn_weights, d_out,
+        kv_offsets, kv_lengths, dq, dk_full, dv_full,
+        n_nodes, n_heads, head_dim, max_len, scale
+    );
+}
+
+// =============================================================================
 // Synchronize
 // =============================================================================
 

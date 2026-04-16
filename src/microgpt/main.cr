@@ -927,6 +927,7 @@ module MicroGPT
       else
 
       emit_val.call(0)
+      MicroGPT::PerfTrace.reset if MicroGPT::PerfTrace.enabled?
       steps.times do |step|
         if fm = future_model
           input, targets = dataset.sample(config.seq_len, 0)
@@ -973,6 +974,11 @@ module MicroGPT
       end  # close agpt_walk_trainer else branch
 
       emit_val.call(steps) if steps > 0
+
+      if !agpt_mode && MicroGPT::PerfTrace.enabled?
+        lines = MicroGPT::PerfTrace.report_lines
+        puts "  [perf window/#{steps}steps] #{lines.join(" | ")}" unless lines.empty?
+      end
 
       if steps > 0
         puts "Final avg loss: #{"%.4f" % avg_loss}"

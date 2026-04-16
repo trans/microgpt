@@ -1525,18 +1525,27 @@ class MiniGPT
   end
 
   def train_step(input_ids : Array(Int32), target_ids : Array(Int32)) : Float64
-    logits = forward(input_ids)
-    loss, grad = @output.loss_and_backward(logits, target_ids)
+    logits = uninitialized Mat
+    PerfTrace.with_scope("window.forward") { logits = forward(input_ids) }
 
-    grad = @final_norm.backward(grad)
-    @blocks.reverse_each { |b| grad = b.backward(grad) }
-    @embedding.backward(grad)
+    loss = 0.0
+    grad = uninitialized Mat
+    PerfTrace.with_scope("window.loss") { loss, grad = @output.loss_and_backward(logits, target_ids) }
+
+    PerfTrace.with_scope("window.final_norm_backward") { grad = @final_norm.backward(grad) }
+    @blocks.size.times do |i|
+      li = @blocks.size - 1 - i
+      PerfTrace.with_scope("window.block#{li}.backward") { grad = @blocks[li].backward(grad) }
+    end
+    PerfTrace.with_scope("window.embedding_backward") { @embedding.backward(grad) }
 
     lr = @config.learning_rate
-    @embedding.update(lr)
-    @blocks.each &.update(lr)
-    @final_norm.update(lr)
-    @output.update(lr)
+    PerfTrace.with_scope("window.update") do
+      @embedding.update(lr)
+      @blocks.each &.update(lr)
+      @final_norm.update(lr)
+      @output.update(lr)
+    end
 
     loss
   end

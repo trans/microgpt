@@ -38,6 +38,12 @@ void cuda_batched_varlen_attention(
     const int* kv_offsets, const int* kv_lengths,
     float* output, float* weights_out,
     int n_nodes, int n_heads, int head_dim, int max_len, float scale) {}
+void cuda_batched_varlen_attention_backward(
+    const float* q_packed, const float* k_packed, const float* v_packed,
+    const float* attn_weights, const float* d_out,
+    const int* kv_offsets, const int* kv_lengths,
+    float* dq, float* dk_full, float* dv_full,
+    int n_nodes, int n_heads, int head_dim, int max_len, float scale) {}
 void cuda_unpack_batched_attn_output(
     const float* packed_output, float* unpacked_output,
     int n_nodes, int n_heads, int head_dim) {}

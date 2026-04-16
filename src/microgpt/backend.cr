@@ -558,6 +558,13 @@ lib LibCUDAKernels
     output : Float32*, weights_out : Float32*,
     n_nodes : Int32, n_heads : Int32, head_dim : Int32,
     max_len : Int32, scale : Float32)
+  fun cuda_batched_varlen_attention_backward(
+    q_packed : Float32*, k_packed : Float32*, v_packed : Float32*,
+    attn_weights : Float32*, d_out : Float32*,
+    kv_offsets : Int32*, kv_lengths : Int32*,
+    dq : Float32*, dk_full : Float32*, dv_full : Float32*,
+    n_nodes : Int32, n_heads : Int32, head_dim : Int32,
+    max_len : Int32, scale : Float32)
   fun cuda_unpack_batched_attn_output(
     packed_output : Float32*, unpacked_output : Float32*,
     n_nodes : Int32, n_heads : Int32, head_dim : Int32)
