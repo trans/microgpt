@@ -120,9 +120,9 @@ end
 # =============================================================================
 
 class Mat
-  # Global memory tracking
+  # Global memory tracking. Default 3 GiB; override with MICROGPT_MAT_CAP_GIB.
   @@allocated_bytes : Int64 = 0_i64
-  @@max_bytes : Int64 = 3_i64 * 1024 * 1024 * 1024  # 3 GiB default cap
+  @@max_bytes : Int64 = (ENV["MICROGPT_MAT_CAP_GIB"]?.try(&.to_i) || 3).to_i64 * 1024_i64 * 1024_i64 * 1024_i64
 
   def self.allocated_bytes : Int64
     @@allocated_bytes

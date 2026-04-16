@@ -190,6 +190,45 @@ module MicroGPT
           scratch_d_scores = Array(Float32).new(seq_len, 0.0_f32)
           scratch_rope = Array(Float32).new(max_head_dim, 0.0_f32)
 
+          # GPU backward path: pack inputs, launch kernel, download gradients,
+          # CPU-side scatter + inverse RoPE. Fallback to per-node CPU path if
+          # not enabled or not on CuBLAS backend.
+          if ENV["AGPT_GPU_BACKWARD"]? == "1" && MicroGPT.backend.is_a?(MicroGPT::CuBLASBackend)
+            gpu_attention_backward_depth(
+              results, li, n, d_model, head_dims, n_heads, n_layers, seq_len,
+              d_head_outs, kv_store, corpus, attn,
+              dq_all_data, dk_current_all_data, dv_current_all_data,
+              grad_accums, scratch_rope
+            )
+            MicroGPT::PerfTrace.add_time("agpt.backward.layer#{li}.attention", Time.instant - attn_started.not_nil!) if attn_started
+
+            # Skip the CPU per-node loop below
+            proj_started = Time.instant if MicroGPT::PerfTrace.enabled?
+            attn.wq.dw.add!(ln1_out_b.t * dq_all)
+            attn.wk.dw.add!(ln1_out_b.t * dk_current_all)
+            attn.wv.dw.add!(ln1_out_b.t * dv_current_all)
+            trace_sync_delta("agpt.backward.layer#{li}.qkv_bias") do
+              n.times do |i|
+                d_model.times do |j|
+                  attn.wq.db[0, j] += dq_all[i, j]
+                  attn.wk.db[0, j] += dk_current_all[i, j]
+                  attn.wv.db[0, j] += dv_current_all[i, j]
+                end
+              end
+            end
+            d_ln1_out = dq_all * attn.wq.w.t
+            d_ln1_out.add!(dk_current_all * attn.wk.w.t)
+            d_ln1_out.add!(dv_current_all * attn.wv.w.t)
+            d_ln1 = batched_ln_backward(
+              d_ln1_out, ln1_norm_b, ln1_sinv_b,
+              block.ln1.gamma, block.ln1.dgamma, block.ln1.dbeta
+            )
+            d_hidden.add!(d_ln1)
+            MicroGPT::PerfTrace.add_time("agpt.backward.layer#{li}.qkv_ln1", Time.instant - proj_started.not_nil!) if proj_started
+            MicroGPT::PerfTrace.add_time("agpt.backward.layer#{li}.total", Time.instant - block_started.not_nil!) if block_started
+            next
+          end
+
           n.times do |i|
             GC.collect if i > 0 && i % 2000 == 0
 
@@ -291,6 +330,228 @@ module MicroGPT
       end
 
       # --- Helpers ---
+
+      # GPU-batched per-node attention backward for one layer.
+      # Packs inputs (Q, K, V, attn_weights, d_out) into flat buffers matching
+      # the forward kernel layout, launches cuda_batched_varlen_attention_backward,
+      # downloads gradients, and performs CPU-side ancestor scatter + inverse RoPE.
+      private def gpu_attention_backward_depth(
+        results, li, n, d_model, head_dims, n_heads, n_layers, seq_len,
+        d_head_outs, kv_store, corpus, attn,
+        dq_all_data, dk_current_all_data, dv_current_all_data,
+        grad_accums, scratch_rope
+      )
+        hd = head_dims[0]  # assumes uniform head dims (matches forward kernel)
+
+        # Compute prefix lengths and max_len (same as forward)
+        prefix_lens = Array(Int32).new(n)
+        n.times { |i| prefix_lens << results[i].ancestor_ids.size }
+        max_len = prefix_lens.max
+
+        # Pack Q: [N * n_heads, hd]
+        q_flat = Array(Float32).new(n * n_heads * hd, 0.0_f32)
+        n.times do |i|
+          bs = results[i].block_states[li]
+          n_heads.times do |hi|
+            base = (i * n_heads + hi) * hd
+            q_src = bs.q_parts[hi].raw_data
+            hd.times { |j| q_flat[base + j] = q_src[j] }
+          end
+        end
+
+        # Pack attn_weights: [N * n_heads * max_len]
+        w_flat = Array(Float32).new(n * n_heads * max_len, 0.0_f32)
+        n.times do |i|
+          bs = results[i].block_states[li]
+          pl = prefix_lens[i]
+          n_heads.times do |hi|
+            w_src = bs.attn_weights[hi].raw_data
+            w_base = (i * n_heads + hi) * max_len
+            pl.times { |p| w_flat[w_base + p] = w_src[p] }
+          end
+        end
+
+        # Pack d_out: [N * n_heads, hd] (from d_head_outs per head)
+        d_out_flat = Array(Float32).new(n * n_heads * hd, 0.0_f32)
+        n.times do |i|
+          n_heads.times do |hi|
+            d_src = d_head_outs[hi].raw_data
+            base = (i * n_heads + hi) * hd
+            hd.times { |j| d_out_flat[base + j] = d_src[i * hd + j] }
+          end
+        end
+
+        # Pack K/V: for each node, collect its ancestor chain K/V (same as forward)
+        kv_offsets = Array(Int32).new(n, 0)
+        total_kv = 0
+        n.times do |i|
+          kv_offsets[i] = total_kv
+          total_kv += prefix_lens[i]
+        end
+        k_flat = Array(Float32).new(total_kv * n_heads * hd, 0.0_f32)
+        v_flat = Array(Float32).new(total_kv * n_heads * hd, 0.0_f32)
+        n.times do |i|
+          node_id = results[i].node_id
+          offset = kv_offsets[i]
+          chain = [] of Int32
+          current = node_id
+          while current != -1
+            chain << current
+            current = corpus.parent_id(current)
+          end
+          chain.reverse!
+          pos = 0
+          (1...chain.size).each do |ci|
+            anc_id = chain[ci]
+            entry = kv_store.entries[anc_id]?
+            next unless entry
+            layer_entry = entry[li]?
+            next unless layer_entry
+            n_heads.times do |hi|
+              k_row, v_row = layer_entry[hi]
+              base = (offset + pos) * n_heads * hd + hi * hd
+              hd.times do |j|
+                k_flat[base + j] = k_row[0, j]
+                v_flat[base + j] = v_row[0, j]
+              end
+            end
+            pos += 1
+          end
+        end
+
+        # Upload to GPU
+        q_gpu = gpu_alloc_copy_local(q_flat)
+        k_gpu = gpu_alloc_copy_local(k_flat)
+        v_gpu = gpu_alloc_copy_local(v_flat)
+        w_gpu = gpu_alloc_copy_local(w_flat)
+        d_out_gpu = gpu_alloc_copy_local(d_out_flat)
+        offsets_gpu = gpu_alloc_copy_int_local(kv_offsets)
+        lengths_gpu = gpu_alloc_copy_int_local(prefix_lens)
+
+        # Allocate output buffers on GPU
+        dq_size = n * n_heads * hd
+        dk_size = total_kv * n_heads * hd
+        dv_size = total_kv * n_heads * hd
+        dq_gpu = gpu_alloc_local(dq_size)
+        dk_gpu = gpu_alloc_local(dk_size)
+        dv_gpu = gpu_alloc_local(dv_size)
+
+        scale = (1.0 / Math.sqrt(hd.to_f64)).to_f32
+        LibCUDAKernels.cuda_batched_varlen_attention_backward(
+          q_gpu, k_gpu, v_gpu, w_gpu, d_out_gpu,
+          offsets_gpu, lengths_gpu,
+          dq_gpu, dk_gpu, dv_gpu,
+          n, n_heads, hd, max_len, scale
+        )
+        LibCUDAKernels.cuda_sync
+
+        # Download gradients
+        dq_host = Array(Float32).new(dq_size, 0.0_f32)
+        dk_host = Array(Float32).new(dk_size, 0.0_f32)
+        dv_host = Array(Float32).new(dv_size, 0.0_f32)
+        LibCUDA.cudaMemcpy(dq_host.to_unsafe.as(Void*), dq_gpu.as(Void*),
+                           dq_size.to_u64 * sizeof(Float32), 2)
+        LibCUDA.cudaMemcpy(dk_host.to_unsafe.as(Void*), dk_gpu.as(Void*),
+                           dk_size.to_u64 * sizeof(Float32), 2)
+        LibCUDA.cudaMemcpy(dv_host.to_unsafe.as(Void*), dv_gpu.as(Void*),
+                           dv_size.to_u64 * sizeof(Float32), 2)
+
+        # Free GPU buffers
+        LibCUDA.cudaFree(q_gpu.as(Void*))
+        LibCUDA.cudaFree(k_gpu.as(Void*))
+        LibCUDA.cudaFree(v_gpu.as(Void*))
+        LibCUDA.cudaFree(w_gpu.as(Void*))
+        LibCUDA.cudaFree(d_out_gpu.as(Void*))
+        LibCUDA.cudaFree(offsets_gpu.as(Void*))
+        LibCUDA.cudaFree(lengths_gpu.as(Void*))
+        LibCUDA.cudaFree(dq_gpu.as(Void*))
+        LibCUDA.cudaFree(dk_gpu.as(Void*))
+        LibCUDA.cudaFree(dv_gpu.as(Void*))
+
+        # Write dq into dq_all_data, apply inverse RoPE
+        n.times do |i|
+          bs = results[i].block_states[li]
+          position = results[i].position
+          col_offset = 0
+          n_heads.times do |hi|
+            hd_h = head_dims[hi]
+            dq_base = (i * n_heads + hi) * hd_h
+            out_offset = i * d_model + col_offset
+            hd_h.times { |j| dq_all_data[out_offset + j] = dq_host[dq_base + j] }
+            apply_inverse_rope_slice!(dq_all_data, out_offset, hd_h, attn.ropes[hi], position, scratch_rope)
+            col_offset += hd_h
+          end
+
+          # Last position (pos == prefix_len - 1) is THIS node's own K/V; write
+          # its dk/dv into dk_current_all, dv_current_all + apply inverse RoPE
+          # on dk.
+          result = results[i]
+          accum = grad_accums[result.node_id]? || NodeGradAccum.new(n_layers, head_dims)
+          offset = kv_offsets[i]
+          last_p = prefix_lens[i] - 1
+          col_offset = 0
+          n_heads.times do |hi|
+            hd_h = head_dims[hi]
+            kv_base = (offset + last_p) * n_heads * hd_h + hi * hd_h
+            out_offset = i * d_model + col_offset
+            accum_dk = accum.dk[li][hi].raw_data
+            accum_dv = accum.dv[li][hi].raw_data
+            hd_h.times do |j|
+              dk_current_all_data[out_offset + j] = dk_host[kv_base + j] + accum_dk[j]
+              dv_current_all_data[out_offset + j] = dv_host[kv_base + j] + accum_dv[j]
+            end
+            apply_inverse_rope_slice!(dk_current_all_data, out_offset, hd_h, attn.ropes[hi], position, scratch_rope)
+            col_offset += hd_h
+          end
+
+          # Ancestor scatter: positions 0..last_p-1 contribute to ancestor grad_accums
+          ancestor_ids = result.ancestor_ids
+          (0...last_p).each do |pos|
+            anc_id = ancestor_ids[pos]
+            acc = grad_accums[anc_id]? || begin
+              a = NodeGradAccum.new(n_layers, head_dims)
+              grad_accums[anc_id] = a
+              a
+            end
+            col_offset2 = 0
+            n_heads.times do |hi|
+              hd_h = head_dims[hi]
+              kv_base = (offset + pos) * n_heads * hd_h + hi * hd_h
+              acc_dk = acc.dk[li][hi].raw_data
+              acc_dv = acc.dv[li][hi].raw_data
+              hd_h.times do |j|
+                acc_dk[j] += dk_host[kv_base + j]
+                acc_dv[j] += dv_host[kv_base + j]
+              end
+              col_offset2 += hd_h
+            end
+          end
+
+          grad_accums.delete(result.node_id)
+        end
+      end
+
+      private def gpu_alloc_copy_local(data : Array(Float32)) : Float32*
+        ptr = Pointer(Void).null
+        LibCUDA.cudaMalloc(pointerof(ptr), data.size.to_u64 * sizeof(Float32))
+        LibCUDA.cudaMemcpy(ptr, data.to_unsafe.as(Void*),
+                           data.size.to_u64 * sizeof(Float32), 1)
+        ptr.as(Float32*)
+      end
+
+      private def gpu_alloc_copy_int_local(data : Array(Int32)) : Int32*
+        ptr = Pointer(Void).null
+        LibCUDA.cudaMalloc(pointerof(ptr), data.size.to_u64 * sizeof(Int32))
+        LibCUDA.cudaMemcpy(ptr, data.to_unsafe.as(Void*),
+                           data.size.to_u64 * sizeof(Int32), 1)
+        ptr.as(Int32*)
+      end
+
+      private def gpu_alloc_local(n : Int32) : Float32*
+        ptr = Pointer(Void).null
+        LibCUDA.cudaMalloc(pointerof(ptr), n.to_u64 * sizeof(Float32))
+        ptr.as(Float32*)
+      end
 
       private def reconstruct_node_layer_cache(node_id, li, kv_store, corpus, head_dims, seq_len, n_heads)
         layer_cache = kv_store.reconstruct_layer_cache(node_id, corpus, li, head_dims, seq_len)

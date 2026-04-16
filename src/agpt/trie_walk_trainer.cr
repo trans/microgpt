@@ -160,12 +160,19 @@ module MicroGPT
           end
           MicroGPT::PerfTrace.add_time("agpt.epoch.loss", Time.instant - loss_started.not_nil!) if loss_started
 
-          # Partition into subtries by root child
+          # Partition into subtries by root child, OR single group per depth if
+          # AGPT_DEPTH_BATCHED=1 (experiment: ~16 updates/epoch instead of ~912).
           partition_started = Time.instant if MicroGPT::PerfTrace.enabled?
           subtries = {} of Int32 => Array(BatchedDepthForward::NodeResult)
-          eligible.each do |node|
-            root_id = node_root_child[node.id]
-            (subtries[root_id] ||= [] of BatchedDepthForward::NodeResult) << result_map[node.id]
+          if ENV["AGPT_DEPTH_BATCHED"]? == "1"
+            all_at_depth = [] of BatchedDepthForward::NodeResult
+            eligible.each { |node| all_at_depth << result_map[node.id] }
+            subtries[-1] = all_at_depth
+          else
+            eligible.each do |node|
+              root_id = node_root_child[node.id]
+              (subtries[root_id] ||= [] of BatchedDepthForward::NodeResult) << result_map[node.id]
+            end
           end
           if partition_started
             MicroGPT::PerfTrace.add_time("agpt.epoch.partition", Time.instant - partition_started.not_nil!)
