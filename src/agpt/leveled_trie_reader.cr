@@ -9,6 +9,8 @@ module MicroGPT
     # Intended for training where access pattern is BFS (current depth +
     # parent depth). Default cache holds 3 depths.
     class LeveledTrieReader
+      include TrieAccessor
+
       MAGIC = 0x4C475041_u32  # 'LGPA' (matches TrieCorpus::LEVELED_MAGIC)
 
       # Per-node record as loaded from disk for one depth.
@@ -182,29 +184,29 @@ module MicroGPT
       end
 
       # Accessors — all route through fault() and look up by global id.
-      def record(global_id : Int32) : LoadedRecord
-        d = @id_to_depth[global_id].to_i
+      def record(id : Int32) : LoadedRecord
+        d = @id_to_depth[id].to_i
         chunk = fault(d)
-        idx = chunk.id_to_local[global_id]
+        idx = chunk.id_to_local[id]
         chunk.records[idx]
       end
 
-      def parent_id(global_id : Int32) : Int32
-        record(global_id).parent_id
+      def parent_id(id : Int32) : Int32
+        record(id).parent_id
       end
 
-      def token_id_of(global_id : Int32) : Int32
-        record(global_id).token
+      def token_id_of(id : Int32) : Int32
+        record(id).token
       end
 
-      def depth_of(global_id : Int32) : Int32
-        @id_to_depth[global_id].to_i
+      def depth_of(id : Int32) : Int32
+        @id_to_depth[id].to_i
       end
 
-      def counts_of(global_id : Int32) : Array({Int32, Int32})
-        d = depth_of(global_id)
+      def counts_of(id : Int32) : Array({Int32, Int32})
+        d = depth_of(id)
         chunk = fault(d)
-        chunk.counts[global_id]? || ([] of {Int32, Int32})
+        chunk.counts[id]? || ([] of {Int32, Int32})
       end
 
       def nodes_at_depth(d : Int32) : Array(LoadedRecord)

@@ -18,6 +18,8 @@ module MicroGPT
     # This is intended for correctness-first replay-prefix training, not yet for
     # the full shared-prefix DAG execution described in the AGPT core note.
     class TrieCorpus
+      include TrieAccessor
+
       MAGIC = 0x54475041_u32
       VERSION = 2_i32
 

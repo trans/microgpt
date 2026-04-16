@@ -45,7 +45,7 @@ module MicroGPT
       # the node's own K/V and capturing BlockStepState.
       def reconstruct_parent_cache(
         node_id : Int32,
-        corpus : TrieCorpus,
+        corpus : TrieAccessor,
         n_layers : Int32,
         head_dims : Array(Int32),
         seq_len : Int32
@@ -106,7 +106,7 @@ module MicroGPT
       # attention within the batched forward). Returns a LayerKVCache.
       def reconstruct_layer_cache(
         node_id : Int32,
-        corpus : TrieCorpus,
+        corpus : TrieAccessor,
         layer : Int32,
         head_dims : Array(Int32),
         seq_len : Int32

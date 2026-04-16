@@ -85,7 +85,7 @@ module MicroGPT
         start_depth : Int32,
         kv_store : NodeKVStore,
         model : MiniGPT,
-        corpus : TrieCorpus
+        corpus : TrieAccessor
       ) : {Array(NodeResult), Array(LayerKVCache)}
         l = chain_nodes.size
         raise ArgumentError.new("forward_unary_chain: empty chain") if l == 0
@@ -314,7 +314,7 @@ module MicroGPT
         node_positions : Hash(Int32, Int32),
         kv_store : NodeKVStore,
         model : MiniGPT,
-        corpus : TrieCorpus,
+        corpus : TrieAccessor,
         parent_caches : Hash(Int32, Array(LayerKVCache))? = nil
       ) : {Array(NodeResult), Hash(Int32, Array(LayerKVCache))}
         scoped_result = nil.as({Array(NodeResult), Hash(Int32, Array(LayerKVCache))}?)

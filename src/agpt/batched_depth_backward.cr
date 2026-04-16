@@ -25,7 +25,7 @@ module MicroGPT
         grad_accums : Hash(Int32, NodeGradAccum),
         kv_store : NodeKVStore,
         model : MiniGPT,
-        corpus : TrieCorpus,
+        corpus : TrieAccessor,
         forward_caches : Hash(Int32, Array(LayerKVCache))? = nil
       )
         MicroGPT::PerfTrace.with_scope("agpt.backward") do
