@@ -116,6 +116,31 @@ enum class CurriculumMode { Flat, Progressive };
 //  - RMSProp:  per-param variance without momentum; isolates Adam's two mechanisms
 enum class OptimizerKind { Adam, SGD, Momentum, RMSProp };
 
+// Learning rate schedules.
+//  - Constant:     lr stays at base_lr throughout training.
+//  - Cosine:       lr decays as 0.5·base_lr·(1 + cos(π·progress)), progress ∈ [0,1] over total steps
+//  - WarmupCosine: linear ramp from 0 to base_lr over first warmup_steps, then cosine decay
+//                  over the remaining steps.
+// Relevant for AGPT because the "converges fast then overfits" pattern benefits from
+// aggressive early steps followed by near-zero late steps.
+enum class LRSchedule { Constant, Cosine, WarmupCosine };
+
+static float compute_lr(float base_lr, int step, int total_steps,
+                         int warmup_steps, LRSchedule sched) {
+    if (total_steps <= 1) return base_lr;
+    if (sched == LRSchedule::Constant) return base_lr;
+    if (sched == LRSchedule::WarmupCosine && step < warmup_steps) {
+        return base_lr * ((float)(step + 1) / (float)warmup_steps);
+    }
+    // cosine tail — progress from end-of-warmup (or 0 for pure cosine) to total
+    int cos_start = (sched == LRSchedule::WarmupCosine) ? warmup_steps : 0;
+    int cos_end   = total_steps;
+    if (cos_end <= cos_start) return base_lr;
+    float progress = (float)(step - cos_start) / (float)(cos_end - cos_start);
+    if (progress > 1.0f) progress = 1.0f;
+    return 0.5f * base_lr * (1.0f + cosf(3.14159265358979323846f * progress));
+}
+
 // ============================================================================
 // Weight layout: flat buffer with computed offsets
 // ============================================================================
@@ -2545,8 +2570,15 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
                         int subtree_splits,
                         bool single_subtree, float intermediate_weight,
                         OptimizerKind optimizer, float momentum_beta, float rmsprop_beta,
+                        LRSchedule lr_schedule, int warmup_epochs,
                         CurriculumMode curriculum, const char* save_path)
 {
+    const char* sched_name = (lr_schedule == LRSchedule::Constant)    ? "constant"
+                           : (lr_schedule == LRSchedule::Cosine)       ? "cosine"
+                           :                                             "warmup-cosine";
+    if (lr_schedule != LRSchedule::Constant) {
+        printf("  lr-schedule: %s (peak=%.4g, warmup_epochs=%d)\n", sched_name, cfg.lr, warmup_epochs);
+    }
     const char* opt_name = (optimizer == OptimizerKind::Adam)     ? "adam"
                          : (optimizer == OptimizerKind::SGD)      ? "sgd"
                          : (optimizer == OptimizerKind::Momentum) ? "momentum"
@@ -3488,24 +3520,42 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
             // have been accumulated into d_grads (Jacobian factorization realized
             // via additive gradient accumulation).
             adam_t++;
+            // Apply LR schedule: `adam_t` counts total optimizer steps taken so
+            // far (monotonically across epochs). We need total_steps to compute
+            // cosine progress — estimate once at first step from structural info.
+            static int total_opt_steps_estimate = 0;
+            if (adam_t == 1) {
+                // Rough estimate: expected updates per epoch × epochs.
+                // For flat curriculum: n_root_children × subtree_splits.
+                // For progressive: same × curriculum_max_depth (actually less at shallow levels,
+                // but this upper-bounds the cosine progress so late steps effectively stay at
+                // final lr instead of overshooting past end).
+                int per_epoch = n_root_children * subtree_splits;
+                if (curriculum == CurriculumMode::Progressive) per_epoch *= curriculum_max_depth;
+                total_opt_steps_estimate = per_epoch * epochs;
+                if (total_opt_steps_estimate < 1) total_opt_steps_estimate = 1;
+            }
+            int warmup_steps = warmup_epochs * n_root_children * subtree_splits;
+            if (curriculum == CurriculumMode::Progressive) warmup_steps *= curriculum_max_depth;
+            float step_lr = compute_lr(cfg.lr, adam_t - 1, total_opt_steps_estimate,
+                                       warmup_steps, lr_schedule);
+
             switch (optimizer) {
                 case OptimizerKind::Adam:
                     cuda_adam_bulk(d_weights, d_grads, d_adam_m, d_adam_v,
-                                    cfg.lr, momentum_beta, rmsprop_beta, 1e-8f,
+                                    step_lr, momentum_beta, rmsprop_beta, 1e-8f,
                                     adam_t, wo.total_floats);
                     break;
                 case OptimizerKind::SGD:
-                    cuda_sgd_bulk(d_weights, d_grads, cfg.lr, wo.total_floats);
+                    cuda_sgd_bulk(d_weights, d_grads, step_lr, wo.total_floats);
                     break;
                 case OptimizerKind::Momentum:
-                    // Reuses d_adam_m as the velocity buffer.
                     cuda_momentum_bulk(d_weights, d_grads, d_adam_m,
-                                       cfg.lr, momentum_beta, wo.total_floats);
+                                       step_lr, momentum_beta, wo.total_floats);
                     break;
                 case OptimizerKind::RMSProp:
-                    // Reuses d_adam_v as the running-square buffer.
                     cuda_rmsprop_bulk(d_weights, d_grads, d_adam_v,
-                                      cfg.lr, rmsprop_beta, 1e-8f, wo.total_floats);
+                                      step_lr, rmsprop_beta, 1e-8f, wo.total_floats);
                     break;
             }
             subtrees_trained++;
@@ -3553,6 +3603,8 @@ int main(int argc, char** argv) {
     OptimizerKind optimizer = OptimizerKind::Adam;
     float momentum_beta = 0.9f;   // used by momentum + (via β₁) adam
     float rmsprop_beta = 0.999f;  // used by rmsprop + (via β₂) adam
+    LRSchedule lr_schedule = LRSchedule::Constant;
+    int warmup_epochs = 0;
     CurriculumMode curriculum = CurriculumMode::Flat;
 
     for (int i = 1; i < argc; i++) {
@@ -3577,6 +3629,14 @@ int main(int argc, char** argv) {
         }
         else if (strcmp(argv[i], "--momentum-beta") == 0 && i + 1 < argc) momentum_beta = atof(argv[++i]);
         else if (strcmp(argv[i], "--rmsprop-beta") == 0 && i + 1 < argc) rmsprop_beta = atof(argv[++i]);
+        else if (strcmp(argv[i], "--lr-schedule") == 0 && i + 1 < argc) {
+            const char* s = argv[++i];
+            if      (strcmp(s, "constant") == 0)      lr_schedule = LRSchedule::Constant;
+            else if (strcmp(s, "cosine") == 0)        lr_schedule = LRSchedule::Cosine;
+            else if (strcmp(s, "warmup-cosine") == 0) lr_schedule = LRSchedule::WarmupCosine;
+            else { fprintf(stderr, "Unknown lr-schedule '%s' (constant|cosine|warmup-cosine)\n", s); return 1; }
+        }
+        else if (strcmp(argv[i], "--warmup-epochs") == 0 && i + 1 < argc) warmup_epochs = atoi(argv[++i]);
         else if (strcmp(argv[i], "--curriculum") == 0 && i + 1 < argc) {
             const char* c = argv[++i];
             if (strcmp(c, "flat") == 0) curriculum = CurriculumMode::Flat;
@@ -3605,6 +3665,8 @@ int main(int argc, char** argv) {
                         "                                momentum/rmsprop use their single β from the same flag.\n"
                         "  [--momentum-beta F]         — default 0.9 (= Adam β₁ when optimizer=adam)\n"
                         "  [--rmsprop-beta F]          — default 0.999 (= Adam β₂ when optimizer=adam)\n"
+                        "  [--lr-schedule constant|cosine|warmup-cosine] — default constant.\n"
+                        "  [--warmup-epochs N]         — warmup length for warmup-cosine (default 0).\n"
                         "  [--save <path>]\n");
         return 1;
     }
@@ -3674,9 +3736,10 @@ int main(int argc, char** argv) {
                                        bool mass_weight, int subtree_splits,
                                        bool single_subtree, float intermediate_weight,
                                        OptimizerKind optimizer, float momentum_beta, float rmsprop_beta,
+                                       LRSchedule lr_schedule, int warmup_epochs,
                                        CurriculumMode curriculum,
                                        const char* save_path);
-        return run_radix_training(cfg, wo, h_weights, radix_trie, epochs, entropy_lambda, mass_weight, subtree_splits, single_subtree, intermediate_weight, optimizer, momentum_beta, rmsprop_beta, curriculum, save_path);
+        return run_radix_training(cfg, wo, h_weights, radix_trie, epochs, entropy_lambda, mass_weight, subtree_splits, single_subtree, intermediate_weight, optimizer, momentum_beta, rmsprop_beta, lr_schedule, warmup_epochs, curriculum, save_path);
     }
 
     // Load leveled trie
