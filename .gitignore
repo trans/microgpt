@@ -11,6 +11,7 @@ results.tsv
 tags
 data/comparison/
 **/.playwright-cli/
-data/gutenberg/
+data/gutenberg/*.txt
 data/gutenberg_5m.txt
+rnd/convergence/**/*.csv
 data/input.agpt.model
