@@ -1087,6 +1087,263 @@ extern "C" void cuda_batched_varlen_attention_backward(
 }
 
 // =============================================================================
+// Batched variable-length attention — L-QUERIES per node (radix trie path)
+// =============================================================================
+//
+// Each of N nodes has L_i queries and K_i KV positions (ancestors + own edge).
+// Causal within edge: query j of node i attends to positions
+//   [kv_offsets[i] .. kv_offsets[i] + (K_i - L_i) + j]   (inclusive on both ends)
+// i.e. all ancestor positions + edge positions 0..j.
+//
+// Layout:
+//   q_packed        [T_q, H, HD]   where T_q = Σ L_i across nodes
+//   k_packed        [T_kv, H, HD]  where T_kv = Σ K_i across nodes (packed per node)
+//   v_packed        [T_kv, H, HD]
+//   query_to_node   [T_q]          node index for each query (precomputed)
+//   query_offsets   [N+1]          start of each node's queries in q_packed
+//   kv_offsets      [N+1]          start of each node's KV in k_packed
+//   kv_lengths      [N]            total KV positions per node (K_i = ancestors + L_i)
+//   output          [T_q, H, HD]
+//   weights_out     [T_q, H, max_kv_len]  (optional — for backward)
+
+__global__ void batched_varlen_attn_L_queries_kernel(
+    const float* q_packed,
+    const float* k_packed,
+    const float* v_packed,
+    const int*   query_to_node,
+    const int*   query_offsets,
+    const int*   kv_offsets,
+    const int*   kv_lengths,
+    float*       output,
+    float*       weights_out,
+    int T_q, int n_heads, int head_dim, int max_kv_len, float scale)
+{
+    int query_idx = blockIdx.x;
+    int head = blockIdx.y;
+    if (query_idx >= T_q) return;
+
+    int node = query_to_node[query_idx];
+    int node_q_start = query_offsets[node];
+    int L_i = query_offsets[node + 1] - node_q_start;
+    int j = query_idx - node_q_start;
+    int kv_off = kv_offsets[node];
+    int K_i = kv_lengths[node];
+    int ancestor_len = K_i - L_i;
+    int prefix_len = ancestor_len + j + 1;
+
+    int tid = threadIdx.x;
+    int nthreads = blockDim.x;
+
+    extern __shared__ float smem[];
+    float* scores = smem;
+    float* reduce_buf = smem + max_kv_len;
+
+    const float* q = q_packed + (query_idx * n_heads + head) * head_dim;
+
+    // scores[p] = q · K[p] * scale
+    for (int p = tid; p < prefix_len; p += nthreads) {
+        const float* k_p = k_packed + ((kv_off + p) * n_heads + head) * head_dim;
+        float dot = 0.0f;
+        for (int d = 0; d < head_dim; d++) dot += q[d] * k_p[d];
+        scores[p] = dot * scale;
+    }
+    __syncthreads();
+
+    // Max for numerical stability
+    float local_max = -FLT_MAX;
+    for (int p = tid; p < prefix_len; p += nthreads)
+        if (scores[p] > local_max) local_max = scores[p];
+    reduce_buf[tid] = local_max;
+    __syncthreads();
+    for (int s = nthreads / 2; s > 0; s >>= 1) {
+        if (tid < s && reduce_buf[tid + s] > reduce_buf[tid]) reduce_buf[tid] = reduce_buf[tid + s];
+        __syncthreads();
+    }
+    float max_val = reduce_buf[0];
+
+    // Exp + sum
+    float local_sum = 0.0f;
+    for (int p = tid; p < prefix_len; p += nthreads) {
+        float e = expf(scores[p] - max_val);
+        scores[p] = e;
+        local_sum += e;
+    }
+    reduce_buf[tid] = local_sum;
+    __syncthreads();
+    for (int s = nthreads / 2; s > 0; s >>= 1) {
+        if (tid < s) reduce_buf[tid] += reduce_buf[tid + s];
+        __syncthreads();
+    }
+    float inv_sum = 1.0f / reduce_buf[0];
+
+    // Normalize
+    for (int p = tid; p < prefix_len; p += nthreads) {
+        scores[p] *= inv_sum;
+    }
+    __syncthreads();
+
+    // Save weights
+    if (weights_out != NULL) {
+        int w_off = (query_idx * n_heads + head) * max_kv_len;
+        for (int p = tid; p < prefix_len; p += nthreads)
+            weights_out[w_off + p] = scores[p];
+    }
+
+    // Weighted sum of V
+    float* out = output + (query_idx * n_heads + head) * head_dim;
+    for (int d = tid; d < head_dim; d += nthreads) {
+        float acc = 0.0f;
+        for (int p = 0; p < prefix_len; p++) {
+            const float* v_p = v_packed + ((kv_off + p) * n_heads + head) * head_dim;
+            acc += scores[p] * v_p[d];
+        }
+        out[d] = acc;
+    }
+}
+
+extern "C" void cuda_batched_varlen_attention_L_queries(
+    const float* q_packed, const float* k_packed, const float* v_packed,
+    const int* query_to_node, const int* query_offsets,
+    const int* kv_offsets, const int* kv_lengths,
+    float* output, float* weights_out,
+    int T_q, int n_heads, int head_dim, int max_kv_len, float scale)
+{
+    dim3 blocks(T_q, n_heads);
+    int threads = (head_dim < 128) ? 32 : 128;
+    int t = 1;
+    while (t < threads) t <<= 1;
+    threads = (t < 32) ? 32 : t;
+    int smem = (max_kv_len + threads) * sizeof(float);
+    batched_varlen_attn_L_queries_kernel<<<blocks, threads, smem>>>(
+        q_packed, k_packed, v_packed,
+        query_to_node, query_offsets, kv_offsets, kv_lengths,
+        output, weights_out, T_q, n_heads, head_dim, max_kv_len, scale);
+}
+
+// =============================================================================
+// L-queries backward
+// =============================================================================
+//
+// For each (query_idx, head):
+//   d_weights[p] = Σ_d d_out[d] * V[p, d]
+//   dot = Σ_p weights[p] * d_weights[p]
+//   d_scores[p] = weights[p] * (d_weights[p] - dot) * scale
+//   dq[d] = Σ_p d_scores[p] * K[p, d]
+//   dk[p, d] += d_scores[p] * q[d]    (atomicAdd — shared K across queries)
+//   dv[p, d] += weights[p] * d_out[d] (atomicAdd)
+
+__global__ void batched_varlen_attn_L_queries_backward_kernel(
+    const float* q_packed,
+    const float* k_packed,
+    const float* v_packed,
+    const float* attn_weights,
+    const float* d_out,
+    const int*   query_to_node,
+    const int*   query_offsets,
+    const int*   kv_offsets,
+    const int*   kv_lengths,
+    float*       dq,
+    float*       dk_full,
+    float*       dv_full,
+    int T_q, int n_heads, int head_dim, int max_kv_len, float scale)
+{
+    int query_idx = blockIdx.x;
+    int head = blockIdx.y;
+    if (query_idx >= T_q) return;
+
+    int node = query_to_node[query_idx];
+    int node_q_start = query_offsets[node];
+    int L_i = query_offsets[node + 1] - node_q_start;
+    int j = query_idx - node_q_start;
+    int kv_off = kv_offsets[node];
+    int K_i = kv_lengths[node];
+    int ancestor_len = K_i - L_i;
+    int prefix_len = ancestor_len + j + 1;
+
+    int tid = threadIdx.x;
+    int nthreads = blockDim.x;
+
+    extern __shared__ float smem[];
+    float* d_weights = smem;                    // [prefix_len]
+    float* reduce_buf = smem + max_kv_len;      // [nthreads]
+
+    const float* q = q_packed + (query_idx * n_heads + head) * head_dim;
+    const float* d_out_r = d_out + (query_idx * n_heads + head) * head_dim;
+    const float* weights = attn_weights + (query_idx * n_heads + head) * max_kv_len;
+
+    // d_weights[p] = Σ_d d_out[d] * V[p, d]
+    for (int p = tid; p < prefix_len; p += nthreads) {
+        const float* v_p = v_packed + ((kv_off + p) * n_heads + head) * head_dim;
+        float acc = 0.0f;
+        for (int d = 0; d < head_dim; d++) acc += d_out_r[d] * v_p[d];
+        d_weights[p] = acc;
+    }
+    __syncthreads();
+
+    // dot = Σ_p weights[p] * d_weights[p]
+    float local_dot = 0.0f;
+    for (int p = tid; p < prefix_len; p += nthreads) local_dot += weights[p] * d_weights[p];
+    reduce_buf[tid] = local_dot;
+    __syncthreads();
+    for (int s = nthreads / 2; s > 0; s >>= 1) {
+        if (tid < s) reduce_buf[tid] += reduce_buf[tid + s];
+        __syncthreads();
+    }
+    float dot = reduce_buf[0];
+
+    // d_scores[p] = weights[p] * (d_weights[p] - dot) * scale
+    // Store back into d_weights buffer (we no longer need d_weights)
+    for (int p = tid; p < prefix_len; p += nthreads) {
+        d_weights[p] = weights[p] * (d_weights[p] - dot) * scale;
+    }
+    __syncthreads();
+
+    // dq[d] = Σ_p d_scores[p] * K[p, d]
+    float* dq_r = dq + (query_idx * n_heads + head) * head_dim;
+    for (int d = tid; d < head_dim; d += nthreads) {
+        float acc = 0.0f;
+        for (int p = 0; p < prefix_len; p++) {
+            const float* k_p = k_packed + ((kv_off + p) * n_heads + head) * head_dim;
+            acc += d_weights[p] * k_p[d];
+        }
+        dq_r[d] = acc;
+    }
+
+    // dk[p, d] += d_scores[p] * q[d]  (atomic, shared across queries)
+    // dv[p, d] += weights[p] * d_out[d]
+    for (int p = tid; p < prefix_len; p += nthreads) {
+        float d_score = d_weights[p];
+        float w = weights[p];
+        float* dk_p = dk_full + ((kv_off + p) * n_heads + head) * head_dim;
+        float* dv_p = dv_full + ((kv_off + p) * n_heads + head) * head_dim;
+        for (int d = 0; d < head_dim; d++) {
+            atomicAdd(&dk_p[d], d_score * q[d]);
+            atomicAdd(&dv_p[d], w * d_out_r[d]);
+        }
+    }
+}
+
+extern "C" void cuda_batched_varlen_attention_L_queries_backward(
+    const float* q_packed, const float* k_packed, const float* v_packed,
+    const float* attn_weights, const float* d_out,
+    const int* query_to_node, const int* query_offsets,
+    const int* kv_offsets, const int* kv_lengths,
+    float* dq, float* dk_full, float* dv_full,
+    int T_q, int n_heads, int head_dim, int max_kv_len, float scale)
+{
+    dim3 blocks(T_q, n_heads);
+    int threads = (head_dim < 128) ? 32 : 128;
+    int t = 1;
+    while (t < threads) t <<= 1;
+    threads = (t < 32) ? 32 : t;
+    int smem = (max_kv_len + threads) * sizeof(float);
+    batched_varlen_attn_L_queries_backward_kernel<<<blocks, threads, smem>>>(
+        q_packed, k_packed, v_packed, attn_weights, d_out,
+        query_to_node, query_offsets, kv_offsets, kv_lengths,
+        dq, dk_full, dv_full, T_q, n_heads, head_dim, max_kv_len, scale);
+}
+
+// =============================================================================
 // Synchronize
 // =============================================================================
 

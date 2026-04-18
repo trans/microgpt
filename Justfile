@@ -20,6 +20,24 @@ build-cuda:
     /opt/cuda/bin/nvcc -c -O2 src/cuda/kernels.cu -o build/kernels.o
     timeout 3m crystal build src/microgpt/main.cr -o bin/microgpt --release --link-flags="{{root}}/build/kernels.o -lstdc++"
 
+# Build radix-trie verify tool (CPU-only, Crystal)
+build-radix-verify:
+    mkdir -p build bin
+    cc -c -O2 src/cuda/stubs.c -o build/kernels.o
+    timeout 3m crystal build src/tools/radix_verify.cr -o bin/radix-verify --link-flags="{{root}}/build/kernels.o"
+
+# Build perplexity eval tool (Crystal). Uses openblas or crystal backend by default.
+# For cublas, rebuild the tool with real CUDA kernels linked.
+build-perplexity:
+    mkdir -p build bin
+    cc -c -O2 src/cuda/stubs.c -o build/kernels.o
+    timeout 3m crystal build src/tools/perplexity.cr -o bin/perplexity --release --link-flags="{{root}}/build/kernels.o"
+
+# Build AGPT CUDA training engine (standalone GPU trainer)
+build-agpt-train:
+    mkdir -p bin
+    /opt/cuda/bin/nvcc -O2 src/cuda/agpt_train.cu src/cuda/kernels.cu -lcublas -o bin/agpt_train
+
 # Build cloud GPU CLI
 build-cloud:
     mkdir -p bin
