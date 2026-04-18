@@ -14,6 +14,9 @@ require "./agpt/batched_depth_forward"
 require "./agpt/batched_depth_backward"
 require "./agpt/trie_walk_trainer"
 require "./agpt/leveled_trie_walk_trainer"
+require "./agpt/streaming_leveled_builder"
+require "./agpt/streaming_radix_builder"
+require "./agpt/radix_trie_reader"
 
 module MicroGPT
   module AGPT

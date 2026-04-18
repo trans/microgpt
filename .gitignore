@@ -12,3 +12,6 @@ results.tsv
 tags
 data/comparison/
 **/.playwright-cli/
+data/gutenberg/
+data/gutenberg_5m.txt
+data/input.agpt.model
