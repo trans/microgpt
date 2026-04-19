@@ -1652,8 +1652,14 @@ class MiniGPT
       f.write_bytes(@config.vocab_size.to_i32, IO::ByteFormat::LittleEndian)
       f.write_bytes(@config.seq_len.to_i32, IO::ByteFormat::LittleEndian)
 
-      # Weight matrices
+      # Weight matrices.
+      # Under the cublas backend, training updates the GPU-side copies and
+      # marks the CPU mirror stale. Without sync_to_cpu here, save() was
+      # writing untrained CPU weights — every cublas-trained checkpoint was
+      # effectively random-init. See docs/known-bugs-cublas-training.md
+      # (now fixed).
       weight_mats.each do |mat|
+        mat.sync_to_cpu
         f.write_bytes(mat.rows.to_i32, IO::ByteFormat::LittleEndian)
         f.write_bytes(mat.cols.to_i32, IO::ByteFormat::LittleEndian)
         mat.raw_data.each do |v|

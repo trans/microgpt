@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 # Saturated window-training baseline sweep for the AGPT paper.
 #
-# IMPORTANT: uses --backend openblas, not cublas. The cublas train_step path
-# in bin/microgpt produces a loss that goes down but a model whose generation
-# output is gibberish and whose held-out PPL is worse than random (≈170 on
-# a vocab=65 corpus). See docs/known-bugs-cublas-training.md. Openblas is
-# slower (CPU) but correct — the paper's window baselines must use it.
+# Uses --backend cublas for GPU speed. The save-stale-weights bug that was
+# silently making cublas training effectively train random-init models was
+# fixed 2026-04-19 (see docs/known-bugs-cublas-training.md).
 #
 # Trains the same 108k-param model at seq_len ∈ {128, 512, 1024, 2048, 4096}
 # for 10k steps each (adjusted down at longer contexts to fit hardware budget),
@@ -28,7 +26,7 @@ run_one () {
     echo "=== seq_len=$sl, $steps steps, cap=${cap}GiB ===" | tee -a "$LOG"
     local start=$(date +%s)
     MICROGPT_MAT_CAP_GIB=$cap bin/microgpt --file data/input.txt \
-        --steps $steps --seq-len $sl --backend openblas \
+        --steps $steps --seq-len $sl --backend cublas \
         --model "$model" --seed 42 2>&1 | tail -3 | tee -a "$LOG"
     local train_time=$(($(date +%s) - start))
     echo "train time: ${train_time}s" | tee -a "$LOG"
@@ -45,6 +43,8 @@ run_one () {
     echo
 }
 
+run_one 16   10000 3
+run_one 32   10000 3
 run_one 128  10000 3
 run_one 512  10000 3
 run_one 1024 10000 3

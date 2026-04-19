@@ -1,4 +1,10 @@
-# Known bug: `bin/microgpt` cublas backend produces broken window-trained models
+# [FIXED 2026-04-19] `bin/microgpt` cublas backend produced broken window-trained models
+
+**Resolution:** `MiniGPT#save` was reading `mat.raw_data` directly, which under the
+cublas backend is the stale CPU mirror — GPU-side training updates were never
+synced back before the file write. Added `mat.sync_to_cpu` before each mat
+write in `src/microgpt/micro_gpt.cr` `save`. Verified: cublas 500-step window
+training now produces PPL 13.70 (indistinguishable from openblas's 13.47).
 
 ## Symptom
 
