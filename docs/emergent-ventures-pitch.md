@@ -35,8 +35,7 @@ model, consumer GPU):
   gradient sum (§5 of the paper derives this).
 - At matched context, trie-based training reaches lower held-out
   perplexity than a conventional window baseline with roughly 10×
-  fewer optimizer steps (trie runs use RMSProp; window uses Adam —
-  both adaptive).
+  fewer optimizer steps.
 - The method fits depth-32 training in a consumer-memory budget
   through per-subtree KV allocation, and scales to deeper depth
   through n-gram partitioning.
@@ -58,24 +57,23 @@ The scaling hypothesis has a principled basis, not just an empirical
 extrapolation from Shakespeare:
 
 - **Redundancy compounds with corpus size.** A larger corpus has more
-  prefix reuse; the trie's deduplication ratio grows rather than
-  shrinks. The factorization benefit (§5 of the paper) strengthens
-  at scale.
-- **Pruning becomes closer to free.** At small corpus, mass-1 paths
-  are a meaningful fraction of the gradient signal; at billion-token
-  scale, the mass-1 long tail is approximately noise. The quality
-  cost of aggressive pruning drops as the corpus grows.
-- **Radix compression works harder.** More repeated substrings =
-  more unary chains to collapse = lower asymptotic storage cost per
-  unit of branching signal.
-- **Per-subtree training is natively distributable.** Each subtree
-  is self-contained; cluster-level parallelism is a manifest split,
-  not a gradient-averaging protocol. The memory-scaling infrastructure
-  already in the codebase is the distributed-training interface.
+  prefix reuse; the trie's deduplication ratio should grow rather than
+  shrink. The factorization benefit derived in the paper becomes more
+  relevant at scale.
+- **Pruning becomes cheaper.** At small corpus, mass-1 paths are a
+  meaningful fraction of the gradient signal; at much larger scale,
+  more of the long tail should behave like noise. That may reduce the
+  quality cost of aggressive pruning.
+- **Radix compression should strengthen.** More repeated substrings
+  means more unary chains to collapse, lowering storage cost per unit
+  of branching signal.
+- **Per-subtree training is naturally partitionable.** Each subtree is
+  self-contained, making parallel execution a direct structural split
+  rather than a purely optimizer-level trick.
 
-The grant validates constants, not concepts. The unknown is how far
-these asymptotic advantages extend into the BPE-vocabulary + 100M-
-token regime — not whether there is a scaling path at all.
+The core mechanism is already demonstrated at small scale. The grant
+tests how far these advantages survive in the BPE-vocabulary and
+100M-token regime, and where the practical limits appear.
 
 ## What the grant buys
 
@@ -90,16 +88,16 @@ Small enough to iterate quickly; big enough to surface the real
 engineering issues.
 
 **Phase 2 — Mid-scale comparison** (WikiText-103 scale, ~100M
-tokens, ~10M parameters). Head-to-head against a saturated
+tokens, ~10M parameters). Head-to-head against a conventional
 window-training baseline at matched model size and compute. Scaling
 to 100M BPE tokens on cloud hardware will require the per-subtree
-infrastructure + bigram/trigram partitioning + aggressive pruning;
-single-GPU may be sufficient or may need a small cluster,
-resolved during Phase 1.
+infrastructure + bigram/trigram partitioning + aggressive pruning.
+Phase 1 determines the final cloud configuration for the mid-scale
+run.
 
 **Phase 3 — Writeup and ablations.** Per-component contribution
-analysis, failure cases, peer-method comparison (ByT5 or similar
-tokenizer-sensitive baseline), paper revisions.
+analysis, failure cases, comparison against a tokenizer-sensitive
+baseline such as ByT5, and paper revisions.
 
 Estimated cloud compute across phases: **$500-2,500** — depending
 on whether mid-scale fits a single 80GB GPU or needs a 2-4 GPU node.
