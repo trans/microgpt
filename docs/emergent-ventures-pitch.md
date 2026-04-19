@@ -16,11 +16,14 @@ computable from a prefix trie of the corpus — one gradient per
 distinct prefix, not one per sampled window. I have implemented this
 end-to-end (CUDA trainer, radix-compressed trie, per-subtree
 KV-cache scoping, bigram partition, auto-LR scaling) and validated
-on a 1.1 MB Shakespeare corpus: **9% lower held-out perplexity at
-matched context with 10× fewer optimizer steps** versus a
-step-saturated window baseline. Working code, reproducible numbers,
-and a theoretical paper with the full gradient-factorization
-derivation are published.
+the idea on a 1.1 MB Shakespeare corpus. In early experiments at
+matched context length, the trie-based method reaches lower held-out
+perplexity with roughly 10× fewer optimizer steps than a step-
+saturated window-training baseline. Next-stage experiments will use
+stricter matched-compute comparisons.
+
+**This is not a vague proposal awaiting a team; it is a working
+system awaiting scale validation.**
 
 ## What's demonstrated vs. what's unknown
 
@@ -29,13 +32,15 @@ consumer GPU):
 
 - Gradient factorization is real and implementable — the trie
   gradient is mathematically equivalent to the window-training
-  gradient sum, §5 of the paper proves this.
-- It converges faster per optimizer step at matched context — PPL
-  13.17 in 195 Adam steps vs. 14.51 in 2000 SGD steps (trie d=32
-  vs. window seq=32).
-- It scales to d=32 on consumer hardware through per-subtree KV
-  allocation (4 GB peak vs. 27.6 GB global), and to d=48+ through
-  bigram partitioning.
+  gradient sum (§5 of the paper derives this).
+- At matched context, trie-based training reaches lower held-out
+  PPL than a step-saturated window baseline with ~10× fewer
+  optimizer steps. Both runs use adaptive optimizers (trie:
+  RMSProp+warmup-cosine; window: Adam); a wall-clock-matched
+  comparison is a next-stage experiment.
+- The method fits depth-32 training in a 15 GB consumer RAM budget
+  through per-subtree KV allocation, and scales to deeper d through
+  bigram partitioning (6× further memory reduction).
 
 **Unknown** (what the grant enables validating):
 
@@ -99,21 +104,10 @@ push to go to the next step.
 
 ## What success looks like
 
-Best case: the mid-scale experiment shows trie-based training
-matching or beating window training at BPE vocabularies and
-100M-token corpora. The paper gets cited; a big lab (Anthropic,
-Together, EleutherAI) picks it up for frontier-scale validation and
-I either collaborate or get hired.
-
-Realistic case: the advantage partially holds at scale, with
-caveats about specific corpus types or model sizes. A publishable
-result that contributes a new training primitive to the community.
-
-Worst case: the advantage does not survive the BPE / 100M-token
-jump. Still a publishable negative result with clear diagnosis of
-why, and the memory-scaling infrastructure (per-subtree, bigram,
-SA-based builders) remains a reusable contribution for trie-based
-training in general.
+Even a negative result would be publishable, because the method is
+concrete and the experiment cleanly identifies whether the advantage
+survives scale. The memory-scaling infrastructure (per-subtree,
+bigram, SA-based builders) is a reusable contribution either way.
 
 ## Why this is EV-shaped
 
