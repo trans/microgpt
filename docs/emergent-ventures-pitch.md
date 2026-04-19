@@ -99,7 +99,7 @@ run.
 analysis, failure cases, comparison against a tokenizer-sensitive
 baseline such as ByT5, and paper revisions.
 
-Estimated cloud compute across phases: **$500-2,500** — depending
+Estimated cloud compute across phases: **$1,000-2,500** — depending
 on whether mid-scale fits a single 80GB GPU or needs a 2-4 GPU node.
 The larger cost is time, not compute.
 
@@ -125,14 +125,19 @@ Deliverables at three months:
 
 ## Why me, why now
 
-I'm an independent software engineer and researcher who has been
-working on this for several months. The full implementation —
-radix-compressed trie builder, CUDA training engine, per-subtree
-memory scaling infrastructure, bigram partition, auto-LR, held-out
-PPL evaluation, and the theoretical paper — is already working and
-public. What's missing is the compute and runway to run the scale
-validation that would determine whether this is a genuine
-methodological advance or a small-corpus artifact.
+I'm a software engineer with 40+ years of programming experience,
+a mathematics background, and — since being laid off recently — an
+intensive self-directed focus on the theory and practice of
+language-model training. The full implementation — radix-compressed
+trie builder, CUDA training engine, per-subtree memory scaling
+infrastructure, n-gram partition, auto-LR, held-out PPL evaluation,
+and the theoretical paper — is already working and public. The
+gradient-factorization reformulation came out of the specific
+combination of long-form implementation experience and formal
+mathematical intuition; it's the kind of result that is more
+accessible from outside the usual institutional pipeline than from
+inside it. What's missing is compute and runway to run the scale
+validation.
 
 This is a good fit for EV's model of supporting independent
 researchers who've shipped something concrete but need a small,
