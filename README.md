@@ -1,9 +1,42 @@
-# MicroGPT
+# MicroGPT / AGPT Research Repository
 
-A minimal Transformer language model in Crystal. Character-level, from scratch,
-with heterogeneous attention head support and pluggable backends (Crystal, OpenBLAS, cuBLAS).
+This repository is the home of the **AGPT (Aggregated-Gradient
+Pretraining)** research project and its reference implementation.
+It also contains the underlying Crystal transformer library used as
+the experimental substrate, plus supporting work.
 
-## Design Decisions
+## What's here
+
+- **[AGPT paper](docs/agpt-paper.md)** — the primary research
+  artifact: a gradient-factorization theorem for autoregressive
+  training on prefix tries, a memory-scalable implementation, and
+  empirical results on Shakespeare. This is the main thing to read.
+- **[AGPT training engine](src/cuda/agpt_train.cu)** — the CUDA
+  implementation validating the paper: radix-compressed trie
+  training with per-subtree KV-cache scoping, bigram partitioning,
+  auto-LR scaling, and frequency-based pruning.
+- **[MicroGPT](src/microgpt/)** — a minimal Crystal transformer
+  (from-scratch attention, pluggable Crystal/OpenBLAS/cuBLAS
+  backends) used as the substrate for the AGPT experiments and the
+  window-training baseline. Described in detail in the
+  *Design Decisions* section below.
+- **[Path-probability convergence paper](rnd/)** — an earlier
+  preprint on the statistical convergence of path-frequency
+  distributions across independent corpus splits; supporting work
+  that motivated some of AGPT's trie-based formulation. Results in
+  `rnd/results-extended.md`.
+- **Construction kit** (`src/microgpt/construction_kit.cr`,
+  frontend in `frontend/`) — an experimental graphical UI for
+  designing transformer architectures. Partially implemented and
+  not required to run or evaluate AGPT.
+
+For a short summary of the AGPT research claim and context, see
+[`docs/emergent-ventures-pitch.md`](docs/emergent-ventures-pitch.md).
+
+## MicroGPT library — Design Decisions
+
+The following sections describe the Crystal transformer library
+itself, which AGPT uses as its transformer substrate.
 
 ### Data Chunking
 
