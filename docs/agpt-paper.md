@@ -54,12 +54,12 @@ The resulting formulation exposes a different computational structure for traini
 
 ## 2. From Sequences to Prefix Trie
 
-Let a corpus be represented as a collection of token sequences. Instead of treating each sequence independently, we construct a prefix trie $\mathcal{T}$, where each node \( p \in \mathcal{T} \) represents a unique prefix.
+Let a corpus be represented as a collection of token sequences. Instead of treating each sequence independently, we construct a prefix trie $\mathcal{T}$, where each node $p \in \mathcal{T}$ represents a unique prefix.
 
-For each node \( p \), define:
+For each node $p$, define:
 
-- \( n(p,x) \): the number of times token \( x \) follows prefix \( p \)
-- \( N_p = \sum_x n(p,x) \): the total number of continuations
+- $n(p,x)$: the number of times token $x$ follows prefix $p$
+- $N_p = \sum_x n(p,x)$: the total number of continuations
 
 Model recurrence:
 
@@ -79,7 +79,7 @@ This objective is equivalent to standard next-token training, but expressed over
 
 ## 3. Gradient at a Node (Local Form)
 
-Define the error at node \( p \):
+Define the error at node $p$:
 
 $$
 e_{p,x} = \pi_{p,x} N_p - n_{p,x}
@@ -121,13 +121,13 @@ This section presents the central structural result underlying the prefix-trie f
 
 ### 5.1 Setup
 
-Let \( p \in \mathcal{T} \) be a prefix node in the trie.
+Let $p \in \mathcal{T}$ be a prefix node in the trie.
 
 Let:
-- \( h_p \) denote the hidden state at node \( p \)
-- \( p \cdot x \) denote extension of prefix \( p \) by token \( x \)
-- \( s \) index suffix paths descending from \( p \)
-- \( g_s \) denote the gradient contribution to \( \frac{\partial L}{\partial h_{p'}} \) arising from a suffix path \( s \)
+- $h_p$ denote the hidden state at node $p$
+- $p \cdot x$ denote extension of prefix $p$ by token $x$
+- $s$ index suffix paths descending from $p$
+- $g_s$ denote the gradient contribution to $\frac{\partial L}{\partial h_{p'}}$ arising from a suffix path $s$
 
 Define the **prefix Jacobian**:
 
@@ -135,13 +135,13 @@ $$
 J_p := \prod_{k \in \text{prefix}(p)} \frac{\partial h_{k+1}}{\partial h_k}
 $$
 
-This represents the total derivative mapping from the root state \( h_\epsilon \) to the state \( h_p \), or more generally from any ancestor to \( h_p \) depending on context.
+This represents the total derivative mapping from the root state $h_\epsilon$ to the state $h_p$, or more generally from any ancestor to $h_p$ depending on context.
 
 ---
 
 ### 5.2 Per-Path Gradient Formulation
 
-In the standard (sequence-based) formulation, the total gradient at prefix \( p \) is expressed as a sum over all suffix paths:
+In the standard (sequence-based) formulation, the total gradient at prefix $p$ is expressed as a sum over all suffix paths:
 
 $$
 \frac{\partial L}{\partial h_p}
@@ -152,7 +152,7 @@ J_p \cdot g_s
 \right)
 $$
 
-Here, each suffix path contributes independently, and the shared prefix Jacobian \( J_p \) is applied repeatedly.
+Here, each suffix path contributes independently, and the shared prefix Jacobian $J_p$ is applied repeatedly.
 
 ---
 
@@ -295,13 +295,13 @@ Key observation:
 
 Let:
 
-- \( T \) denote the total number of token occurrences in the corpus
-- \( P \) denote the number of unique prefixes
+- $T$ denote the total number of token occurrences in the corpus
+- $P$ denote the number of unique prefixes
 
 Then:
 
-- Standard training complexity scales with \( O(T) \)
-- Trie-based training scales with \( O(P) \)
+- Standard training complexity scales with $O(T)$
+- Trie-based training scales with $O(P)$
 
 In realistic corpora:
 
@@ -325,7 +325,7 @@ $$
 J_p \cdot \left(\sum_{s \in \text{subtree}(p)} g_s\right)
 $$
 
-Rather than applying the prefix Jacobian \( J_p \) separately for each suffix path, the trie formulation aggregates suffix gradients first.
+Rather than applying the prefix Jacobian $J_p$ separately for each suffix path, the trie formulation aggregates suffix gradients first.
 
 Consequences:
 
@@ -366,7 +366,7 @@ The trie formulation introduces additional memory requirements:
 - storage of prefix nodes
 - storage of hidden states per prefix
 
-Memory scales with \( P \), the number of unique prefixes.
+Memory scales with $P$, the number of unique prefixes.
 
 However:
 
@@ -415,7 +415,7 @@ This corresponds to full-batch gradient descent.
 In practice, updates can be performed over **bounded subtries**:
 
 - select a subset of roots  
-- include all descendants up to depth \( d \)  
+- include all descendants up to depth $d$  
 - compute forward and backward over this subgraph  
 - update once per subtrie  
 
