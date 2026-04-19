@@ -83,7 +83,9 @@ Deliverables in 3 months:
 1. Mid-scale experiment result (BPE, 100M tokens, ~10M params).
 2. Updated paper posted to arXiv.
 3. Workshop submission.
-4. Open-source release of the cloud-ready training code.
+4. Paper, trained models, and evaluation scripts released publicly;
+   training pipeline released under a source-available license
+   suitable for academic use and reproduction.
 
 ## Why me, why now
 

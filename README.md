@@ -132,4 +132,21 @@ just build-cuda      # release build with GPU support
 
 ## Contributors
 
-- [Thomas Sawyer](https://github.com/your-github-user) - creator and maintainer
+- [Thomas Sawyer](https://github.com/trans) — creator and maintainer
+
+## License
+
+This repository is released under the [PolyForm Noncommercial License
+1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/) —
+see [`LICENSE`](LICENSE).
+
+Academic research, personal study, and use by educational or
+research institutions are permitted and encouraged. Commercial use
+(including commercial products or services built on this code)
+requires a separate license — contact the author at
+`transfire@gmail.com`.
+
+Prior revisions of this repository were published under the MIT
+License; those earlier revisions remain available under MIT for the
+code as it existed at those points in the git history. The PolyForm
+Noncommercial license applies to the repository going forward.
