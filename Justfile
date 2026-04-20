@@ -90,18 +90,13 @@ test:
     crystal spec
 
 # Generate all docs
-docs: docs-tech docs-api
+docs: docs-api
 
-# Generate technical reference HTML from markdown
-docs-tech:
-    pandoc docs/tech/reference.md \
-        -o docs/tech/index.html \
-        --standalone \
-        --toc \
-        --toc-depth=3 \
-        --metadata title="MicroGPT Technical Reference"
-
-# Generate Crystal API docs
+# Generate Crystal API docs.
+# Output goes to docs/api/ — kept under docs/ by Crystal convention,
+# alongside two redirect stubs (agpt-paper.md, emergent-ventures-pitch.md)
+# that point to the reorganized notes/ directory for any external
+# reader who lands on the old URLs.
 docs-api:
     crystal doc -o docs/api
 

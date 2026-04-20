@@ -7,7 +7,7 @@ the experimental substrate, plus supporting work.
 
 ## What's here
 
-- **[AGPT paper](docs/agpt-paper.md)** — the primary research
+- **[AGPT paper](notes/agpt/paper.md)** — the primary research
   artifact: a gradient-factorization theorem for autoregressive
   training on prefix tries, a memory-scalable implementation, and
   empirical results on Shakespeare. This is the main thing to read.
@@ -31,7 +31,7 @@ the experimental substrate, plus supporting work.
   not required to run or evaluate AGPT.
 
 For a short summary of the AGPT research claim and context, see
-[`docs/emergent-ventures-pitch.md`](docs/emergent-ventures-pitch.md).
+[`notes/grants/emergent-ventures-pitch.md`](notes/grants/emergent-ventures-pitch.md).
 
 ## MicroGPT library — Design Decisions
 
