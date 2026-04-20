@@ -201,6 +201,49 @@ fully cutoff. The mass-filter experiment suggests the difference will
 be small (rank correlation is robust), but having the decomposition
 makes the claim testable rather than assumed.
 
+## Eliminating interior termination at the source (construction fix)
+
+The previous sections take `terminal_count` as a fact of the data and
+add bookkeeping to track it. A cleaner approach is to **remove the
+source of interior termination at build time**.
+
+**Observation:** the starts that produce interior terminations are
+exactly those at positions `i > N − D` — the last `D − 1` starts of
+the corpus, whose paths are too short to fill a depth-`D` path. These
+are the starts whose suffixes end "prematurely" within the depth
+limit.
+
+**Fix:** restrict the sliding-start range to `[0, N − D]`. Every
+retained start has a path of length ≥ `D`. As a result:
+
+- At every interior node (depth `< D`):
+  `terminal_count(v) = 0` and `sum(next_counts) = count(v)` exactly.
+- Only depth-`D` nodes have any termination mass, and from exactly
+  one start (the one at position `i = N − D` whose path runs
+  exactly to corpus end).
+- `cutoff_count` behavior is unchanged — still lives only at
+  depth `D`.
+
+**Cost:** `D − 1` starts dropped. For D=16 on Shakespeare (N ≈ 1.1M),
+that is 15 starts out of a million — under 0.002% of the corpus.
+
+**Consequence for transition probabilities:** interior nodes have
+exact conservation, so transition probabilities become simply
+`next_counts[t] / count(v)` (plus Laplace smoothing) with no
+terminal-mass confound in the denominator. Absolute path probabilities
+change slightly from the current formulation. Rank correlation
+between the two corpus halves is almost certainly unaffected — the
+correction applies symmetrically to both halves.
+
+**Framing:** this variant corresponds philosophically to "the trie
+models the distribution over `D`-grams, so only use suffixes long
+enough to *be* a `D`-gram." That framing is tidier than "include every
+suffix and track where each ends." For a convergence paper measuring
+stability of `D`-gram probabilities, this is arguably the more
+principled construction.
+
+---
+
 ## Follow-up TODO
 
 Rebuild the convergence tries with `terminal_count` and
