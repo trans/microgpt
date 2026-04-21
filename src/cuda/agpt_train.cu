@@ -3979,6 +3979,13 @@ int main(int argc, char** argv) {
     bool lr_scale_by_steps = false;  // per-subtree: auto-rescale lr to keep the same
                                       // effective "gradient budget per pass" as the
                                       // unigram-d=16 reference recipe (65 steps/pass).
+    int virtual_cycles = 1;           // root-loop virtual-tree: K cycles of the D-trie
+                                      // strung end-to-end. K=1 is current AGPT.
+                                      // K>1 extends transformer training context to K*D.
+                                      // Phase 1: CLI + prior loading only — NOT YET
+                                      // plumbed into the CUDA forward pass (Phase 2).
+    const char* corpus_path = NULL;   // needed for computing per-subtree priors when
+                                      // virtual_cycles > 1. Typically data/input.txt.
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--model") == 0 && i + 1 < argc) model_path = argv[++i];
@@ -3992,6 +3999,8 @@ int main(int argc, char** argv) {
         else if (strcmp(argv[i], "--chunk-queries") == 0 && i + 1 < argc) chunk_queries = atoi(argv[++i]);
         else if (strcmp(argv[i], "--single-subtree") == 0) single_subtree = true;
         else if (strcmp(argv[i], "--lr-scale-by-steps") == 0) lr_scale_by_steps = true;
+        else if (strcmp(argv[i], "--virtual-cycles") == 0 && i + 1 < argc) virtual_cycles = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--corpus") == 0 && i + 1 < argc) corpus_path = argv[++i];
         else if (strcmp(argv[i], "--intermediate-weight") == 0 && i + 1 < argc) intermediate_weight = atof(argv[++i]);
         else if (strcmp(argv[i], "--optimizer") == 0 && i + 1 < argc) {
             const char* o = argv[++i];
@@ -4022,6 +4031,22 @@ int main(int argc, char** argv) {
         }
     }
     if (subtree_splits < 1) subtree_splits = 1;
+    if (virtual_cycles < 1) virtual_cycles = 1;
+    if (virtual_cycles > 1 && !corpus_path) {
+        fprintf(stderr, "Error: --virtual-cycles > 1 requires --corpus <path> to compute per-subtree priors.\n");
+        fprintf(stderr, "       Pass the original corpus text file (e.g., --corpus data/input.txt).\n");
+        return 1;
+    }
+    if (virtual_cycles > 1) {
+        fprintf(stderr, "\n"
+            "  ==========================================================================\n"
+            "  --virtual-cycles=%d (root-loop virtual tree training)\n"
+            "  Phase 1 of 2: CLI plumbed, priors will be computed from --corpus.\n"
+            "  Phase 2 (CUDA forward-pass extension) NOT YET IMPLEMENTED — virtual cycles\n"
+            "  > 1 will log diagnostic info and fall back to K=1 training for now.\n"
+            "  ==========================================================================\n\n",
+            virtual_cycles);
+    }
 
     if (!model_path || !trie_dir) {
         fprintf(stderr, "Usage: agpt_train --model <path> --trie-dir <path>\n"
