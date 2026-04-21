@@ -1,8 +1,15 @@
-# Root-Loop Implementation Plan
+# Root-Loop Implementation Plan (Phase 2 spec)
 
 Branch: `agpt-root-loop`
 Goal: extend current AGPT training to context K·D while preserving
 AGPT aggregation and avoiding classical-backoff sparse regions.
+
+**Phase 1 status**: CLI flags `--virtual-cycles K` and `--corpus
+<path>` added to `bin/agpt_train`. K=1 is unchanged current AGPT;
+K>1 is validated and rejected with a Phase 2 not-implemented message
+until this spec is built.
+
+**Phase 2 status**: spec below, not yet coded.
 
 ## Construction (to confirm before coding)
 
@@ -119,56 +126,162 @@ experiment.** Deterministic, cheap, fully automatic. If it works,
 we have a result. If it doesn't, Option i is the more realistic
 but costlier fallback.
 
-## Open questions before coding
+## Settled design (from the root-loop design discussion)
 
-1. **Confirm Mj vs M1** for within-segment distribution (default
-   Mj).
-2. **Confirm Option D** (random cycle per pass) for cycle selection
-   (I advocate this; user may want Option B for determinism).
-3. **Confirm Option ii** (Markov-1-greedy prior) for canonical prior
-   (advocates for this; flag Option i as fallback).
-4. **K**: how many cycles? `K = seq_len / D`. For seq_len=128 and
-   D=32, K=4. For seq_len=128 and D=16, K=8. Start with small K.
-5. **Aggregation**: how does the subtree-scoped Adam step integrate
-   with random cycle sampling? I think: one random cycle per
-   radix-node-forward-pass, gradients aggregate into the subtree's
-   one Adam step. Confirm.
+These points are settled — Phase 2 should implement them, not
+re-debate them:
 
-## Implementation outline (for current CUDA trainer)
+1. **Within-segment Markov order: Mj** (not M1). Within each
+   D-segment, the distribution at segment-relative depth j uses the
+   last j tokens of the segment. At the D-boundary, the leaf token
+   seeds the next segment at depth 1 (reset).
+2. **Cycle iteration: K× forward/backward passes per radix node**.
+   Each of N's K virtual positions (one per cycle) gets its own
+   training pass with cycle-specific ancestry. No random sampling —
+   we iterate all cycle positions deterministically. Compute scales
+   roughly linearly with K (not K²), because prefix-sharing
+   compounds: cycle 1 compute = current AGPT; cycle 2 ≈ 2× cycle 1;
+   etc. Net for K=2: ~3× current AGPT.
+3. **Canonical prior: first-occurrence per root-child subtree** (NOT
+   per-radix-node). All radix nodes in a root-child subtree share
+   that subtree's one canonical prior. This is what keeps KV cache
+   sizing tractable. Prior = D tokens immediately preceding the
+   first corpus occurrence of the root-child's first-token.
+4. **Optimizer: RMSProp**. The winning recipe on the d=16 and d=32
+   AGPT runs used RMSProp+warmup-cosine. Same primitive here; just
+   swap `cuda_adam_bulk` for `cuda_rmsprop_bulk`.
+5. **K=2 first**. "Start small" — get K=2 at D=16 working first,
+   measure, iterate. K=4+ comes later if the pattern holds.
+6. **Aggregation semantics**: subtree-scoped optimizer step stays
+   at "one RMSProp step per root-child subtree." Within the step,
+   gradients accumulate over all K cycle-positions of all radix
+   nodes in the subtree.
 
-Once construction confirmed:
+## Phase 2 implementation outline
 
-1. **Virtual ancestor construction (CPU side, one-shot per radix trie
-   load)**: for each radix node, pre-compute the canonical prior for
-   each potential cycle 1..K. Store as array of int32 token-ids. Cost
-   per radix node: O(K·D·V) where V is vocab size (due to
-   Markov-1-greedy which iterates over all tokens at each step).
+### Step 1: Prior computation (CPU side, in CUDA trainer or builder)
 
-2. **Training inner loop modification**: at each radix-node forward
-   pass:
-   - Sample random cycle k ∈ {1..K}.
-   - Concatenate: [prior[k], N's D-trie ancestors, N's edge tokens] →
-     pad or trim to K·D total length.
-   - Run forward through transformer over this full input.
-   - Compute loss against N's endpoint_counts at the endpoint.
-   - Accumulate gradient as today.
+For K>1, we need per-root-child-subtree priors. One per root-child,
+(K-1)·D tokens each. Computation:
 
-3. **RoPE cache**: must extend to K·D positions. If seq_len=K·D is
-   already 128 and RoPE is sized to 128, no change.
+1. Read the corpus text file (new code path — `--corpus <path>`).
+2. Tokenize into char IDs using the same vocab as the trie.
+3. For each root-child (identified by its first-token = char ID c):
+   - Find the first corpus position p where `tokens[p] == c`.
+   - If `p >= (K-1)·D`: prior = `tokens[p - (K-1)·D .. p]`.
+   - Else: prior = zero-pad left, `tokens[0..p]` right-aligned.
+4. Store priors array: `int prior[n_root_children][(K-1)·D]`.
 
-4. **KV cache**: size remains total_edge_chars in current AGPT. The
-   virtual ancestors are mostly in the prior[] arrays, not in the
-   D-trie's char buffer. They feed the transformer's position
-   directly; no KV-cache allocation needed for them.
+Cost: O(N) corpus scan + O(n_root_children · (K-1)·D) storage.
+Trivial. For Shakespeare K=2 D=16: 65 × 16 = 1040 ints = 4 KB.
 
-5. **Optimizer state**: no change. Same Adam/RMSProp structure.
+### Step 2: KV-cache allocation extension
 
-6. **Aggregation semantics**: one forward/backward per radix node
-   per training step; one Adam step per root-child subtree. Same as
-   today.
+Current KV cache is sized to `total_edge_chars × d_model × 2 × n_layers`.
+Add prior KV storage: `n_root_children × (K-1)·D × d_model × 2 × n_layers`.
 
-Estimated LOC: 200-400 in agpt_train.cu, plus a precomputation pass
-in the Crystal-side builder for canonical priors.
+For Shakespeare K=2 D=16: 65 × 16 × 64 × 2 × 2 × 4 bytes = 1 MB.
+Negligible.
+
+Allocate as a separate `d_prior_kv[layer][root_child_id]` buffer
+(so it can be indexed by subtree at training time).
+
+### Step 3: Prior K,V computation at subtree entry
+
+In the per-subtree training loop, before iterating the subtree's
+radix nodes:
+
+1. Load this subtree's root-child ID.
+2. Look up this subtree's prior (from CPU → GPU upload of tokens).
+3. Run embedding + per-layer K,V projection + RoPE on the prior's
+   (K-1)·D tokens.
+4. Store the resulting K,V in `d_prior_kv[layer][root_child_id]`.
+
+These K,V are then reused across ALL the subtree's radix nodes and
+both cycle positions.
+
+### Step 4: Forward-pass attention range extension
+
+Currently each radix-node's query attends over its ancestor_char_ids
+positions (in the global KV cache). For K>1, the query's attention
+range is:
+
+- At cycle 1 (k=1): positions [ancestor_char_ids of N]. Same as today.
+- At cycle 2 (k=2): positions [prior positions] ∪ [ancestor_char_ids
+  of N]. The prior positions are (K-1)·D contiguous slots in
+  d_prior_kv.
+
+Concatenate these two ranges for the query's attention op. Attention
+mask is causal over the combined length.
+
+### Step 5: RoPE position indexing
+
+RoPE must label positions correctly. In the virtual-tree picture:
+
+- Cycle 1 positions: RoPE pos 0..D-1.
+- Cycle 2 positions: RoPE pos D..2D-1.
+- ...
+- Cycle K positions: RoPE pos (K-1)·D .. K·D-1.
+
+For cycle 2 training, the prior occupies RoPE pos 0..D-1, and the
+radix node's ancestor chain occupies RoPE pos D..D+d_N-1.
+
+Current RoPE cache: sized to `cfg.seq_len` (128). If K·D ≤ 128, no
+change needed to the cache itself — just reference the right indices.
+For K=4 D=32 (= 128), we're right at the boundary. K=2 D=16 = 32, well
+within.
+
+### Step 6: Training loop modification
+
+In the per-subtree pass:
+
+```
+for each radix node N in the subtree, in BFS order:
+    for k in 1..K:
+        # k=1: standard AGPT forward (prior ignored)
+        # k>1: prepend prior to attention
+        forward_pass(N, cycle=k)
+        backward_pass(N, cycle=k)
+        accumulate gradients
+# one RMSProp step at subtree end, as today
+optimizer_step(subtree)
+```
+
+### Step 7: Aggregation semantics
+
+Subtree-scoped RMSProp step unchanged. Within the step, we now
+accumulate K × (subtree-radix-count) gradient contributions instead
+of 1 × (subtree-radix-count). Aggregation still happens at each
+virtual-tree node (one gradient per cycle-position).
+
+### Estimated Phase 2 LOC
+
+- Prior computation + corpus read: ~60 LOC
+- KV-cache allocation extension: ~30 LOC
+- Prior K,V computation at subtree entry: ~50 LOC
+- Forward-pass attention range extension: ~80 LOC
+- Training loop K-iteration: ~40 LOC
+- Testing + verification: ~40 LOC
+
+Total: ~300 LOC, concentrated in `agpt_train.cu`.
+
+## Testing plan
+
+1. **Unit-level**: with K=1, output must match pre-Phase-2 behavior
+   bit-for-bit. Regress the d=16 PPL 15.28 recipe first.
+2. **Smoke**: K=2 at D=16 for 1 super-epoch. Check for NaNs,
+   sensible loss decrease.
+3. **Full**: K=2 at D=16 for 50 super-epochs. Measure PPL vs
+   current-AGPT d=16 baseline (15.28) and current-AGPT d=32
+   baseline (13.17). Hypothesis: K=2 D=16 ≈ D=32 in PPL, with
+   lower per-subtree memory footprint.
+
+## Where the branch is
+
+- Branch: `agpt-root-loop`
+- Last commit: Phase 1 CLI scaffolding
+- Main is untouched: d=16 PPL 15.28 and d=32 PPL 13.17 baselines
+  are reproducible from main for comparison.
 
 ## Comparison plan
 
