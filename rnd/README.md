@@ -30,4 +30,5 @@ rnd/
 | [mass-conservation](mass-conservation/) | complete | main | Suffix tree mass conservation (terminal + cutoff decomposition). |
 | [root-loop](root-loop/) | complete — K=2 negative | `agpt-root-loop` | Virtual-tree leaf-to-root training (K>1). Didn't beat K=1 baseline at d=16. |
 | [blending](blending/) | complete — d=16 win | `agpt-root-loop` | Suffix-depth blending at radix endpoints. +0.32 PPL at d=16; no help at d=32. |
-| [sparsity-profile](sparsity-profile/) | in progress | main | Measure trie sparsity as a function of depth. |
+| [sparsity-profile](sparsity-profile/) | complete | main | Per-depth sparsity profile for d=8/16/32. Cap absorbs 97.9% of chars at d=32; radix endpoints plateau at ~1.67M. |
+| [sgd-sanity-check](sgd-sanity-check/) | in progress | main | Compare SGD vs AGPT at matched compute; probe weighting choice. |
