@@ -142,11 +142,16 @@ re-debate them:
    roughly linearly with K (not K²), because prefix-sharing
    compounds: cycle 1 compute = current AGPT; cycle 2 ≈ 2× cycle 1;
    etc. Net for K=2: ~3× current AGPT.
-3. **Canonical prior: first-occurrence per root-child subtree** (NOT
-   per-radix-node). All radix nodes in a root-child subtree share
-   that subtree's one canonical prior. This is what keeps KV cache
-   sizing tractable. Prior = D tokens immediately preceding the
-   first corpus occurrence of the root-child's first-token.
+3. **Canonical prior: D-trie-derived, per root-child subtree** (NOT
+   per-radix-node, and NOT from the corpus file). All radix nodes
+   in a root-child subtree share that subtree's one canonical
+   prior. This keeps KV cache sizing tractable and keeps the
+   trainer self-contained (no external corpus dependency).
+   The prior for root-child R is any D-trie depth-D path whose
+   leaf-token has R's first-token as a valid D-trie bigram
+   continuation. Simplest realization: Markov-1-greedy walk from
+   D-trie root, constrained so the resulting leaf can transition
+   into R. Deterministic per R, reproducible from just the trie.
 4. **Optimizer: RMSProp**. The winning recipe on the d=16 and d=32
    AGPT runs used RMSProp+warmup-cosine. Same primitive here; just
    swap `cuda_adam_bulk` for `cuda_rmsprop_bulk`.
@@ -159,21 +164,28 @@ re-debate them:
 
 ## Phase 2 implementation outline
 
-### Step 1: Prior computation (CPU side, in CUDA trainer or builder)
+### Step 1: Prior computation (CPU side, from the D-trie alone)
 
 For K>1, we need per-root-child-subtree priors. One per root-child,
-(K-1)·D tokens each. Computation:
+(K-1)·D tokens each, derived purely from the D-trie (no corpus
+file needed). Algorithm for each root-child R:
 
-1. Read the corpus text file (new code path — `--corpus <path>`).
-2. Tokenize into char IDs using the same vocab as the trie.
-3. For each root-child (identified by its first-token = char ID c):
-   - Find the first corpus position p where `tokens[p] == c`.
-   - If `p >= (K-1)·D`: prior = `tokens[p - (K-1)·D .. p]`.
-   - Else: prior = zero-pad left, `tokens[0..p]` right-aligned.
-4. Store priors array: `int prior[n_root_children][(K-1)·D]`.
+1. Identify R's first-token t_R.
+2. Find a D-trie depth-D leaf whose leaf-token has t_R as a
+   D-trie-depth-1 child (i.e., the bigram `leaf_token → t_R` is
+   present in the trie's depth-1-to-2 edges).
+3. If multiple such leaves exist, pick one deterministically — e.g.,
+   highest `edge_mass` along the path to the leaf. Walk that path
+   to collect (K-1)·D tokens.
+4. If no valid leaf exists (rare edge case for small tries), fall
+   back to zero-padding.
+5. Store priors array: `int prior[n_root_children][(K-1)·D]`.
 
-Cost: O(N) corpus scan + O(n_root_children · (K-1)·D) storage.
-Trivial. For Shakespeare K=2 D=16: 65 × 16 = 1040 ints = 4 KB.
+Cost: O(n_root_children × D-trie-search). For Shakespeare K=2 D=16:
+65 × quick walk = negligible. Storage: 65 × 16 = 1040 ints = 4 KB.
+
+Implementation note: this can sit directly in agpt_train.cu CPU-side
+after `load_radix_trie`; no builder-side change needed.
 
 ### Step 2: KV-cache allocation extension
 
