@@ -24,7 +24,7 @@ INIT_CKPT="data/input.agpt.model"
 eval_ppl () {
     local checkpoint="$1"
     bin/perplexity --model "$checkpoint" --file data/input.txt \
-        --max-positions $EVAL_POS --backend openblas 2>&1 \
+        --max-positions $EVAL_POS --backend cublas 2>&1 \
       | awk '/^Perplexity:/ {print $2}'
 }
 
@@ -60,7 +60,7 @@ run_sgd () {
         # and it uses --heads for a different meaning than n_heads).
         /usr/bin/time -f '%e sec' bin/microgpt --file data/input.txt --model "$work" \
             --seq-len "$seq_len" --steps "$steps" \
-            --lr 3e-3 --backend openblas \
+            --lr 3e-3 --backend cublas \
             > "$log" 2>&1
         local ppl=$(eval_ppl "$work")
         local elapsed=$(awk '/sec$/{print $1}' "$log" | tail -1)

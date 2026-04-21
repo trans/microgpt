@@ -67,7 +67,7 @@ for ep in $(seq 1 "$EPOCHS"); do
             --model "$CK" \
             --file "$EVAL_FILE" \
             --max-positions "$EVAL_POSITIONS" \
-            --backend openblas 2>&1 \
+            --backend cublas 2>&1 \
           | awk '/^Perplexity:/ {print $2}')
     echo "  ep${ep}: PPL = $PPL"
     if [[ -z "$BEST_PPL" ]] || awk "BEGIN{exit !($PPL < $BEST_PPL)}"; then
