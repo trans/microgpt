@@ -88,6 +88,29 @@ Raw tables in `results/d8.txt`, `results/d16.txt`, `results/d32.txt`.
    ~2 possibilities with counts 2-3). This is where the corpus's "two-fork"
    structure lives — pairs of completions for a given context.
 
+## Compression profile
+
+Tool now also reports `avg_edge_len` (mean length of the unary-compressed edge
+ending at each depth) and `chars_absorbed` (leveled-trie nodes collapsed into
+that depth's incoming edges). Summary totals:
+
+| Trie | radix endpoints | leveled nodes | compression | cap's share of absorbed chars |
+|---|---|---|---|---|
+| d=8  | 845,539   | 1,545,081  | 1.83×  | 78.7% |
+| d=16 | 1,607,927 | 9,313,896  | 5.79×  | 93.7% |
+| d=32 | 1,666,214 | 27,046,236 | **16.23×** | **97.9%** |
+
+At d=32, the cap absorbs 24.8M of the 25.4M total absorbed characters. Each
+cap endpoint has an avg_edge_len of 23.29 — meaning ~22 unary-chain depths
+collapse into each cap edge on average.
+
+Interior depths show a smooth gradient: avg_edge_len grows from 1.00 at depth 1
+to 15.65 at depth 31, then explodes to 23.29 at the cap.
+
+This says the trie's information structure is concentrated at the shallow-
+interior branching points; everything past depth ~10 is mostly unique-tails
+that compress efficiently into the cap.
+
 ## Implications for next experiments
 
 - **Training budget should scale with depth differently than we've been doing.**

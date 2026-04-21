@@ -37,18 +37,27 @@ puts "  vocab_size: #{reader.vocab_size}"
 puts "  corpus_token_count: #{reader.corpus_token_count}"
 puts ""
 
-puts "Endpoint-depth profile:"
-puts "  depth  n_nodes       total_count  median_count  mean_count    max_count   %singletons  %multi  avg_branch_factor"
+puts "Endpoint-depth profile (per endpoint depth d):"
+puts "  n_nodes      = radix endpoints with endpoint_depth == d"
+puts "  total_count  = Σ counts_val across those endpoints (mass that hits"
+puts "                 a branching decision at this depth; a D-gram may"
+puts "                 contribute to multiple depths)"
+puts "  avg_branch   = mean # of distinct next-tokens per endpoint (= counts.size)"
+puts "                 interior depths ≥ 2 by construction; cap can be 1"
+puts "  avg_edge_len = mean length of the unary-compressed edge ending at d"
+puts "                 1 = no compression; larger = bigger unary chain absorbed"
+puts "  chars_absorbed = Σ (edge_len - 1) = # of original (leveled-trie) nodes"
+puts "                   collapsed INTO edges ending at this depth"
+puts ""
+puts "  depth  n_nodes    total_count  median_cnt  mean_cnt   max_cnt  avg_branch  avg_edge_len  chars_absorbed  %singleton(at cap only)"
 
 (1..reader.depth_file_count - 1).each do |d|
   records = reader.nodes_at_endpoint_depth(d)
   next if records.empty?
 
-  # Per-record: total count = sum of counts_val
-  totals = records.map do |r|
-    r.counts.sum { |pair| pair[1] }
-  end
+  totals = records.map { |r| r.counts.sum { |pair| pair[1] } }
   branches = records.map { |r| r.counts.size }
+  edge_lens = records.map { |r| r.edge_len }
 
   n = records.size
   total_count_all = totals.sum
@@ -56,13 +65,25 @@ puts "  depth  n_nodes       total_count  median_count  mean_count    max_count 
   median = sorted[n // 2]
   mean = total_count_all.to_f / n
   max = sorted.last
-  singletons = records.count { |r| r.counts.size <= 1 }
-  multi = n - singletons
   avg_branch = branches.sum.to_f / n
+  avg_edge_len = edge_lens.sum.to_f / n
+  chars_absorbed = edge_lens.sum - n  # (edge_len - 1) summed across endpoints
 
-  printf "  %5d  %9d  %13d  %12d  %10.2f  %10d  %10.2f%%  %5.2f%%  %.2f\n",
+  is_cap = (d == reader.depth_file_count - 1)
+  singletons = records.count { |r| r.counts.size <= 1 }
+  singleton_str = is_cap ? sprintf("%.2f%%", 100.0 * singletons / n) : "   (n/a)"
+
+  printf "  %5d  %9d  %13d  %10d  %9.2f  %9d  %9.2f  %12.2f  %14d  %s\n",
     d, n, total_count_all, median, mean, max,
-    100.0 * singletons / n,
-    100.0 * multi / n,
-    avg_branch
+    avg_branch, avg_edge_len, chars_absorbed, singleton_str
 end
+
+# Summary totals
+puts ""
+total_radix_endpoints = (0..reader.depth_file_count - 1).sum { |d| reader.nodes_at_endpoint_depth(d).size }
+total_edge_chars = reader.total_edge_chars
+absorbed_chars_total = total_edge_chars - total_radix_endpoints
+compression_ratio = total_edge_chars.to_f / total_radix_endpoints
+printf "Totals:  radix endpoints=%d, total edge chars=%d, absorbed=%d (%.2f%% of leveled nodes), compression=%.2fx\n",
+  total_radix_endpoints, total_edge_chars, absorbed_chars_total,
+  100.0 * absorbed_chars_total / total_edge_chars, compression_ratio
