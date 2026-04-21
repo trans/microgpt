@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Matrix runner for SGD vs. AGPT sanity-check.
+# SGD vs. AGPT sanity-check. Apples-to-apples:
 #
-# Runs each config 3× and captures PPL. Logs per-config in logs/.
-# Assumes the following already exist:
-#   bin/microgpt  (built via `just build` or `just build-cuda`)
-#   bin/agpt_train  (built via `just build-agpt-train`)
-#   bin/perplexity  (built via `just build-perplexity`)
-#   /tmp/agpt_input_d16_radix_pst  (per-subtree trie)
-#   /tmp/agpt_input_d32_per        (per-subtree trie)
-#   data/input.agpt.model          (shared init checkpoint)
+#   - Same init: both tools start from data/input.agpt.model (the random-init
+#     checkpoint all AGPT experiments in this project use).
+#   - Matched training context: SGD at seq_len=16 vs AGPT at d=16;
+#                               SGD at seq_len=32 vs AGPT at d=32.
+#   - Same architecture (d_model=64, n_heads=4, n_layers=2, d_ff=256).
+#   - Same eval: bin/perplexity --max-positions 16384.
+#   - Wall-clock matched: SGD at step budgets chosen to roughly match AGPT's
+#     ~1 min / 3 super-epochs (estimate: ~5000 SGD steps at seq_len=16).
+#     Plus long-budget SGD runs to probe convergence.
 
 set -eu -o pipefail
 
@@ -18,6 +19,7 @@ RES="rnd/sgd-sanity-check/results"
 mkdir -p "$OUT" "$RES"
 N_RUNS=3
 EVAL_POS=16384
+INIT_CKPT="data/input.agpt.model"
 
 eval_ppl () {
     local checkpoint="$1"
@@ -29,58 +31,73 @@ eval_ppl () {
 run_agpt () {
     local label="$1"; local trie="$2"; shift 2
     for i in $(seq 1 $N_RUNS); do
-        local ckpt="/tmp/sgd_sanity_${label}_r${i}.model"
-        cp data/input.agpt.model "$ckpt.work"
+        local work="/tmp/sgd_sanity_${label}_r${i}.model"
+        cp "$INIT_CKPT" "$work"
         local log="$OUT/${label}_r${i}.log"
-        bin/agpt_train --model "$ckpt.work" --trie-dir "$trie" \
+        /usr/bin/time -f '%e sec' bin/agpt_train --model "$work" --trie-dir "$trie" \
             --epochs 3 --lr 3e-3 --optimizer rmsprop --rmsprop-beta 0.999 \
             --lr-schedule warmup-cosine --warmup-epochs 1 \
             --single-subtree --entropy-lambda 1.0 \
-            --save "$ckpt.work" \
+            --save "$work" \
             "$@" > "$log" 2>&1
-        local ppl=$(eval_ppl "$ckpt.work")
-        echo "$label  run $i  PPL = $ppl"
+        local ppl=$(eval_ppl "$work")
+        local elapsed=$(awk '/sec$/{print $1}' "$log" | tail -1)
+        echo "$label  run $i  PPL = $ppl  time = ${elapsed}s"
     done
 }
 
 run_sgd () {
     local label="$1"; local seq_len="$2"; local steps="$3"
     for i in $(seq 1 $N_RUNS); do
-        local ckpt="/tmp/sgd_sanity_${label}_r${i}.model"
+        local work="/tmp/sgd_sanity_${label}_r${i}.model"
+        cp "$INIT_CKPT" "$work"
         local log="$OUT/${label}_r${i}.log"
-        # microgpt's plain window training (no --agpt)
-        bin/microgpt --file data/input.txt \
+        # Plain window training (no --agpt). Loads weights from --model
+        # file (we just copied init into it) and saves back to the same path.
+        # Architecture (d_model/n_heads/n_layers/d_ff) is loaded from the
+        # init checkpoint — don't re-specify on the command line or we
+        # risk mismatching (bin/microgpt doesn't expose --d-ff at all,
+        # and it uses --heads for a different meaning than n_heads).
+        /usr/bin/time -f '%e sec' bin/microgpt --file data/input.txt --model "$work" \
             --seq-len "$seq_len" --steps "$steps" \
-            --d-model 64 --n-heads 4 --n-layers 2 --d-ff 256 \
             --lr 3e-3 --backend openblas \
-            --save "$ckpt" > "$log" 2>&1
-        local ppl=$(eval_ppl "$ckpt")
-        echo "$label  run $i  PPL = $ppl"
+            > "$log" 2>&1
+        local ppl=$(eval_ppl "$work")
+        local elapsed=$(awk '/sec$/{print $1}' "$log" | tail -1)
+        echo "$label  run $i  PPL = $ppl  time = ${elapsed}s"
     done
 }
 
-echo "=== SGD at seq_len=16, varying step budgets ==="
-run_sgd sgd-s16-195   16  195
-run_sgd sgd-s16-1000  16  1000
-run_sgd sgd-s16-5000  16  5000
-run_sgd sgd-s16-20000 16  20000
+echo "=== d=16 comparison (SGD seq_len=16 vs AGPT d=16) ==="
+echo ""
+
+# Step budgets span from AGPT's ~195 equivalent step count up to
+# budgets that should let SGD converge. Fine-grained to see PPL curve.
+echo "-- SGD at seq_len=16 --"
+run_sgd sgd-s16-200    16  200
+run_sgd sgd-s16-1000   16  1000
+run_sgd sgd-s16-5000   16  5000
+run_sgd sgd-s16-20000  16  20000
 
 echo ""
-echo "=== SGD at seq_len=128, varying step budgets ==="
-run_sgd sgd-s128-195   128 195
-run_sgd sgd-s128-1000  128 1000
-run_sgd sgd-s128-5000  128 5000
-
-echo ""
-echo "=== AGPT d=16 baseline ==="
+echo "-- AGPT at d=16 --"
 run_agpt agpt-d16       /tmp/agpt_input_d16_radix_pst
 run_agpt agpt-d16-mass  /tmp/agpt_input_d16_radix_pst --mass-weight
 
 echo ""
-echo "=== AGPT d=32 baseline ==="
+echo "=== d=32 comparison (SGD seq_len=32 vs AGPT d=32) ==="
+echo ""
+echo "-- SGD at seq_len=32 --"
+run_sgd sgd-s32-200    32  200
+run_sgd sgd-s32-1000   32  1000
+run_sgd sgd-s32-5000   32  5000
+run_sgd sgd-s32-20000  32  20000
+
+echo ""
+echo "-- AGPT at d=32 --"
 run_agpt agpt-d32       /tmp/agpt_input_d32_per
 run_agpt agpt-d32-mass  /tmp/agpt_input_d32_per --mass-weight
 
 echo ""
-echo "Done. Logs in $OUT/. Summarize with:"
-echo "  grep -H 'Best:\\|PPL' $OUT/*.log"
+echo "Done. Logs in $OUT/."
+echo "Summary: grep -H 'PPL = \\|sec' $OUT/*.log"
