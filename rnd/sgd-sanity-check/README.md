@@ -2,9 +2,11 @@
 
 **Status**: in progress.
 
-**Code**: main (no new code needed — `bin/microgpt` without `--agpt` does
-SGD window training; `bin/agpt_train` does AGPT). Any new flags we add
-would go on a branch.
+**Code**: branch `sgd-sanity-check` (intended to merge to main once validated).
+Adds `--mass-weight <mode>` where mode ∈ {off, log, sqrt, linear}, replacing
+the old boolean `--mass-weight` flag. Linear mode matches SGD's frequency
+weighting — needed to isolate whether the weighting choice (not the
+aggregation) is what differentiates AGPT from SGD.
 
 ## Hypothesis
 
@@ -61,12 +63,13 @@ All runs use the same model architecture:
 
 | Label | Tool | Mode | Context length |
 |---|---|---|---|
-| sgd-s16 | `bin/microgpt` | plain window training | seq_len=16 |
-| sgd-s128 | `bin/microgpt` | plain window training | seq_len=128 |
-| agpt-d16 | `bin/agpt_train` | AGPT default | d=16 |
-| agpt-d16-mass | `bin/agpt_train` | AGPT + `--mass-weight` | d=16 |
-| agpt-d32 | `bin/agpt_train` | AGPT default | d=32 |
-| agpt-d32-mass | `bin/agpt_train` | AGPT + `--mass-weight` | d=32 |
+| sgd-s16-{2000,10000,50000,200000} | `bin/microgpt` | plain window training | seq_len=16 |
+| sgd-s32-{2000,10000,50000,200000} | `bin/microgpt` | plain window training | seq_len=32 |
+| agpt-d16-off | `bin/agpt_train` | equal per node | d=16 |
+| agpt-d16-log | `bin/agpt_train` | `--mass-weight log` | d=16 |
+| agpt-d16-sqrt | `bin/agpt_train` | `--mass-weight sqrt` | d=16 |
+| agpt-d16-linear | `bin/agpt_train` | `--mass-weight linear` (matches SGD) | d=16 |
+| agpt-d32-{off,log,sqrt,linear} | `bin/agpt_train` | same four modes | d=32 |
 
 ### Matched-compute scheme
 

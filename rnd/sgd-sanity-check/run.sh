@@ -71,32 +71,38 @@ run_sgd () {
 echo "=== d=16 comparison (SGD seq_len=16 vs AGPT d=16) ==="
 echo ""
 
-# Step budgets span from AGPT's ~195 equivalent step count up to
-# budgets that should let SGD converge. Fine-grained to see PPL curve.
+# SGD per step = 1 window of seq_len tokens. For comparison, AGPT per
+# optimizer step aggregates gradients across ~125k query positions. So
+# matched wall-clock (~60s/run) ≈ 5-10k SGD steps; matched gradient-
+# events would need ~1.5M steps. We span budgets to see the PPL curve.
 echo "-- SGD at seq_len=16 --"
-run_sgd sgd-s16-200    16  200
-run_sgd sgd-s16-1000   16  1000
-run_sgd sgd-s16-5000   16  5000
-run_sgd sgd-s16-20000  16  20000
+run_sgd sgd-s16-2000    16  2000
+run_sgd sgd-s16-10000   16  10000
+run_sgd sgd-s16-50000   16  50000
+run_sgd sgd-s16-200000  16  200000
 
 echo ""
-echo "-- AGPT at d=16 --"
-run_agpt agpt-d16       /tmp/agpt_input_d16_radix_pst
-run_agpt agpt-d16-mass  /tmp/agpt_input_d16_radix_pst --mass-weight
+echo "-- AGPT at d=16 (4 mass-weight modes) --"
+run_agpt agpt-d16-off       /tmp/agpt_input_d16_radix_pst  # default mass-weight off
+run_agpt agpt-d16-log       /tmp/agpt_input_d16_radix_pst  --mass-weight log
+run_agpt agpt-d16-sqrt      /tmp/agpt_input_d16_radix_pst  --mass-weight sqrt
+run_agpt agpt-d16-linear    /tmp/agpt_input_d16_radix_pst  --mass-weight linear
 
 echo ""
 echo "=== d=32 comparison (SGD seq_len=32 vs AGPT d=32) ==="
 echo ""
 echo "-- SGD at seq_len=32 --"
-run_sgd sgd-s32-200    32  200
-run_sgd sgd-s32-1000   32  1000
-run_sgd sgd-s32-5000   32  5000
-run_sgd sgd-s32-20000  32  20000
+run_sgd sgd-s32-2000    32  2000
+run_sgd sgd-s32-10000   32  10000
+run_sgd sgd-s32-50000   32  50000
+run_sgd sgd-s32-200000  32  200000
 
 echo ""
-echo "-- AGPT at d=32 --"
-run_agpt agpt-d32       /tmp/agpt_input_d32_per
-run_agpt agpt-d32-mass  /tmp/agpt_input_d32_per --mass-weight
+echo "-- AGPT at d=32 (4 mass-weight modes) --"
+run_agpt agpt-d32-off       /tmp/agpt_input_d32_per  # default mass-weight off
+run_agpt agpt-d32-log       /tmp/agpt_input_d32_per  --mass-weight log
+run_agpt agpt-d32-sqrt      /tmp/agpt_input_d32_per  --mass-weight sqrt
+run_agpt agpt-d32-linear    /tmp/agpt_input_d32_per  --mass-weight linear
 
 echo ""
 echo "Done. Logs in $OUT/."
