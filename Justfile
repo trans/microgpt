@@ -33,6 +33,14 @@ build-trie-profile:
     cc -c -O2 src/cuda/stubs.c -o build/kernels.o
     timeout 3m crystal build src/tools/trie_profile.cr -o bin/trie-profile --link-flags="{{root}}/build/kernels.o"
 
+# Build Bayesian posterior density tool (CPU-only, Crystal). Measures
+# P(prev | π) entropy across all π at a chosen depth — tests whether the
+# Bayesian Bloom proposal would carry information at sparse prefix tips.
+build-bayesian-posterior:
+    mkdir -p build bin
+    cc -c -O2 src/cuda/stubs.c -o build/kernels.o
+    timeout 3m crystal build src/tools/bayesian_posterior.cr -o bin/bayesian-posterior --link-flags="{{root}}/build/kernels.o"
+
 # Build perplexity eval tool (Crystal). Uses openblas or crystal backend by default.
 # For cublas, rebuild the tool with real CUDA kernels linked.
 build-perplexity:

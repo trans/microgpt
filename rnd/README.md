@@ -32,3 +32,4 @@ rnd/
 | [blending](blending/) | complete — d=16 win | `agpt-root-loop` | Suffix-depth blending at radix endpoints. +0.32 PPL at d=16; no help at d=32. |
 | [sparsity-profile](sparsity-profile/) | complete | main | Per-depth sparsity profile for d=8/16/32. Cap absorbs 97.9% of chars at d=32; radix endpoints plateau at ~1.67M. |
 | [sgd-sanity-check](sgd-sanity-check/) | in progress | main | Compare SGD vs AGPT at matched compute; probe weighting choice. |
+| [radix-saturation](radix-saturation/) | in progress | main | From-scratch PPL curve vs. radix-trie saturation. d=8/16/32 → does PPL asymptote as endpoints do? |

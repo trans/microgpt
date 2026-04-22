@@ -1,0 +1,22 @@
+==============================================================
+1-optimizer-step/super-epoch baseline (global radix + --single-subtree)
+  init: data/input.random.model  trie: /tmp/agpt_input_d8_radix  git: b0e6d12
+  baseline ref (d=8, 3 SE, 65 steps/SE lr=3e-3): 17.99 mean
+==============================================================
+1step-d8-lr-3e-3-ep1  run 1  PPL = 132.6714  time = 3s  (rc=0)
+1step-d8-lr-3e-3-ep1  run 2  PPL = 132.5320  time = 2s  (rc=0)
+1step-d8-lr-3e-3-ep1  run 3  PPL = 132.5858  time = 2s  (rc=0)
+1step-d8-lr-1e-2-ep1  run 1  PPL = 216.2406  time = 2s  (rc=0)
+1step-d8-lr-1e-2-ep1  run 2  PPL = 215.7049  time = 2s  (rc=0)
+1step-d8-lr-1e-2-ep1  run 3  PPL = 216.1585  time = 3s  (rc=0)
+1step-d8-lr-3e-2-ep1  run 1  PPL = 398957.5410  time = 2s  (rc=0)
+1step-d8-lr-3e-2-ep1  run 2  PPL = 399382.2960  time = 2s  (rc=0)
+1step-d8-lr-3e-2-ep1  run 3  PPL = 399688.2568  time = 2s  (rc=0)
+1step-d8-lr-1e-1-ep1  run 1  PPL = 10800118290082481211786734411833117906051731532720349956620156928.0000  time = 2s  (rc=0)
+1step-d8-lr-1e-1-ep1  run 2  PPL = 9783859868372446130952895685064014143028440531257660252593586176.0000  time = 3s  (rc=0)
+1step-d8-lr-1e-1-ep1  run 3  PPL = 9225947954428006795380259724159847249786753798745919832241209344.0000  time = 2s  (rc=0)
+1step-d8-lr-3e-1-ep1  run 1  PPL = inf  time = 3s  (rc=0)
+1step-d8-lr-3e-1-ep1  run 2  PPL = inf  time = 2s  (rc=0)
+1step-d8-lr-3e-1-ep1  run 3  PPL = inf  time = 2s  (rc=0)
+
+Done.

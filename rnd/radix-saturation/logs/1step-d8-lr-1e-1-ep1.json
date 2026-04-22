@@ -1,0 +1,21 @@
+{
+  "label": "1step-d8-lr-1e-1-ep1",
+  "tool": "bin/agpt_train_ngram",
+  "trie_dir": "/tmp/agpt_input_d8_radix",
+  "trie_format": "global-radix",
+  "init_checkpoint": "data/input.random.model",
+  "epochs": 1,
+  "lr": 1e-1,
+  "optimizer": "rmsprop",
+  "rmsprop_beta": 0.999,
+  "lr_schedule": "constant",
+  "single_subtree": true,
+  "entropy_lambda": 1.0,
+  "mass_weight": "linear",
+  "eval_positions": 16384,
+  "eval_backend": "cublas",
+  "n_runs": 3,
+  "steps_per_super_epoch": 1,
+  "git_hash": "b0e6d12",
+  "timestamp": "2026-04-22T16:25:11-04:00"
+}

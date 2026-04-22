@@ -1,0 +1,27 @@
+==============================================================
+Radix saturation vs PPL — from-scratch
+  init: data/input.random.model
+  git:  96c2e8f
+==============================================================
+
+-- AGPT linear, 10 super-epochs --
+sat-d8-linear-ep3  run 1  best PPL = 17.6168  time = 176s  (rc=0)
+sat-d8-linear-ep3  run 2  best PPL = 17.7152  time = 176s  (rc=0)
+sat-d8-linear-ep3  run 3  best PPL = 18.6527  time = 177s  (rc=0)
+sat-d16-linear-ep3  run 1  best PPL = 14.5379  time = 201s  (rc=0)
+sat-d16-linear-ep3  run 2  best PPL = 14.7470  time = 200s  (rc=0)
+sat-d16-linear-ep3  run 3  best PPL = 14.4832  time = 196s  (rc=0)
+sat-d32-linear-ep3  run 1  best PPL = 13.1956  time = 241s  (rc=0)
+sat-d32-linear-ep3  run 2  best PPL = 13.5558  time = 243s  (rc=0)
+sat-d32-linear-ep3  run 3  best PPL = 13.4403  time = 236s  (rc=0)
+
+-- SGD at 50k steps (roughly matched wall-clock) --
+sat-sgd-s16-50k  run 1  PPL = 166.4832  time = 585s  (rc=0)
+sat-sgd-s16-50k  run 2  PPL = 166.4832  time = 588s  (rc=0)
+sat-sgd-s16-50k  run 3  PPL = 166.4832  time = 590s  (rc=0)
+sat-sgd-s32-50k  run 1  PPL = 166.4832  time = 288s  (rc=1)
+sat-sgd-s32-50k  run 2  PPL = 166.4832  time = 10s  (rc=1)
+sat-sgd-s32-50k  run 3  PPL = 166.4832  time = 827s  (rc=0)
+
+All done. Summarize:
+  grep -H 'PPL' rnd/radix-saturation/logs/sat-*_r*.log | head

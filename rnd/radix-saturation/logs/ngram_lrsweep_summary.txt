@@ -1,0 +1,21 @@
+==============================================================
+N-gram partition LR sweep (d=16, partition-depth=2, 3 super-epochs)
+  baseline: partition-depth=1 lr=3e-3 warmup-cosine → 14.59 mean
+  git: b0e6d12
+==============================================================
+
+-- partition-depth=2 LR sweep (constant schedule) --
+p2-lr-3e-5  run 1  best PPL = 18.6675 (ep3)  time = 33s  (rc=0)
+p2-lr-3e-5  run 2  best PPL = 18.6704 (ep3)  time = 32s  (rc=0)
+p2-lr-3e-5  run 3  best PPL = 18.6702 (ep3)  time = 32s  (rc=0)
+p2-lr-1e-4  run 1  best PPL = 16.3401 (ep3)  time = 32s  (rc=0)
+p2-lr-1e-4  run 2  best PPL = 16.3151 (ep3)  time = 32s  (rc=0)
+p2-lr-1e-4  run 3  best PPL = 16.3318 (ep3)  time = 31s  (rc=0)
+p2-lr-3e-4  run 1  best PPL = 15.7176 (ep1)  time = 32s  (rc=0)
+p2-lr-3e-4  run 2  best PPL = 15.7560 (ep1)  time = 31s  (rc=0)
+p2-lr-3e-4  run 3  best PPL = 15.7089 (ep1)  time = 32s  (rc=0)
+p2-lr-1e-3  run 1  best PPL = 23.5922 (ep1)  time = 31s  (rc=0)
+p2-lr-1e-3  run 2  best PPL = 22.2366 (ep1)  time = 32s  (rc=0)
+p2-lr-1e-3  run 3  best PPL = 20.5967 (ep1)  time = 31s  (rc=0)
+
+Done.

@@ -1,0 +1,2322 @@
+Loaded checkpoint: /tmp/sat_sat-sgd-s32-50k_r1.model
+MiniGPT ready.
+  Vocab: 65 chars
+  Params: 108481
+  Config: d_model=64 n_layers=2 d_ff=256 seq_len=32 lr=0.003
+  Backend: cublas
+  Model: /tmp/sat_sat-sgd-s32-50k_r1.model
+
+Step 0/50000 (epoch 0): loss = 23.0259 avg = 23.0259
+  seed: First Citizen:
+B
+  gen:  First Citizen:
+B
+$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 50/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: till the altitud
+  gen:  till the altitudzzzzzzzzzTz$zzzzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzz$-zzz!z!zzz,zzzzzzzz
+zzzzzzzzzzzzzzzzzzz,zz
+z.DTzzzz
+
+Step 100/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: u, and you sland
+  gen:  u, and you slandzzzzz3zzzfzzz& zzzGzzzzzzzzzzzzzzzzzzzzzzzzzzzzzIzzzzAzzzzzzzzzzezz
+z3zzzzzzzzzzzzzzzzzzz3zz
+zzzzzz&
+
+Step 150/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  envied his rece
+  gen:   envied his recezzzzzzzzzfzzz .zzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzz!,zzzzzzQzzzDzDzzzzzzzzzzzzzzzz
+zzz$
+zzzzzzzz
+
+Step 200/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: up, that all
+Fro
+  gen:  up, that all
+Frozzzzzzfzzlzzz$zzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz:zzzKzzz
+zzzzzzzzzz
+3Dzzzzzzzzzzzzzzzz!zz
+z
+zzzzzzzz
+
+Step 250/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: 
+A sick man's ap
+  gen:  
+A sick man's apzzzzzzfzzkzzz
+zzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzz$Hzzzz
+zzzzzzzzzzdzz
+zzzzzzzzzzzzzzzzBzzzz$z
+
+zzzzzzz
+
+Step 300/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: e heart of gener
+  gen:  e heart of generzzzzz?
+zzjzzz zzzNDzzzzzzzzzzzzzzzzzzzzzzzzzzzlz zzzzz!
+
+zzzzzzzzzz,zzzzzzzzzzzzzzzzzz!zzz
+zzzzzzzz
+
+Step 350/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: MENENIUS:
+O, tru
+  gen:  MENENIUS:
+O, truzzzzzzzzzzzzz
+zzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzezzzzz -zzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzlz,zzzz$zzzz
+
+Step 400/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  goes
+Upon this 
+  gen:   goes
+Upon this zzzzzzzzz3zzz
+zzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzzJzzzzzzzzzzzzzz.zzz
+ zzzzzzzzzzzzzzzzzzzzzu
+zzzzzzzz
+
+Step 450/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: between us we sh
+  gen:  between us we shzzzzzzzzzjzzz zzz EzzzzzzzzzzzzzzzzzzzzzzzzzzzzzHzzzzzz,Ozzzzzzzzzz !zzzzzzzzzzzzz
+zbz:zzzz
+zzzJzzzz
+
+Step 500/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: I hear hither yo
+  gen:  I hear hither yozzzzzzzzzzzzz
+zzz DzzzzzzzzzzzzzzzzzzzzzzzzzzzzzJzzzzzzz
+zzzzzzzzz
+
+zzzzzzzzzzzzzzzzzzzzzzt
+zzzzzzzz
+
+Step 550/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: , he did so set 
+  gen:  , he did so set zzzzzz
+zzkzzzmzzzM zzzzzzzzzzzzzzzzzzzzzzzzzzzzUJ.zzzzzQTzzzzzzzizz zzzzzzzzzzzzzzzzzz.zzzz
+
+zzzzzz
+
+Step 600/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ity Corioli; the
+  gen:  ity Corioli; thezzzzzzzzz,zzz zzzKDzzzzzzzzzzzzzzzzzzzzzzzzzzzAzIzzz
+zzzAzzzzzz$zzz-3zzzzzzzzzzzzzzzzzzzzzzz zzzzzzz
+
+Step 650/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: fidius; list, wh
+  gen:  fidius; list, whzzzzzzzzzzzzz
+
+zz Dzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+zzzzzzzzzzzzzIzzzz
+
+zzzzzzzzzzzz$zzz!zzzzz
+zzzzzzz
+
+Step 700/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: y.
+
+LARTIUS:
+O n
+  gen:  y.
+
+LARTIUS:
+O nzzzzzzzzz$zzz
+
+zzzDzzzzzzzzzzzzzzzzzzzzzzzzzzzzzDzzzzzzz
+zzzzzzzzzzz3 zzzzzzzzzzzzzzzzzzkzzzzzzzzzzz
+
+Step 750/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: :
+Thy friend no 
+  gen:  :
+Thy friend no zzzzzzhzz!zzz
+zzz! zzzzzzzzzzzzzzzzzzzzzzzzzzzzz;zFzzzzz
+zzzzzzzzzzp zzzzzzzzzzzzzzz
+zzzzzzzzzzzzzzz
+
+Step 800/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: our own.
+
+MARCIU
+  gen:  our own.
+
+MARCIUzzzzz,hzzqzzzzzzzN$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzRzz?zzzzzz
+&z.nzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzz
+
+Step 850/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: INIUS:
+Though I 
+  gen:  INIUS:
+Though I 
+zzzzzgzzTzzzzHzzK zzzzzzzzzzzzzzzzzzzzzzzzzzzzz:zzzzzzzzzzzzzzz&zzzzzzzzzzzzzzzzzzzzz zzz .zzzzzzzz
+
+Step 900/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ame and envy. Fi
+  gen:  ame and envy. Fizzzzzzzzz;zzz,Lzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz:zzz-zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzzzz
+&zzzzzzz
+
+Step 950/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ur doings; and t
+  gen:  ur doings; and tzzzzzzzzz;zzzuzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz!zAzzzzzzzzzzzz'zzzBzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzz
+
+Step 1000/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ore, be it known
+  gen:  ore, be it knownzzzzzzzzz&zzz?KzzMIzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzzzzzzzzzjzz
+3zzzzzzzzzzzzzzzzzzzzzz
+ zzzzzzz
+
+Step 1050/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: US:
+The town is 
+  gen:  US:
+The town is zzzzz?fzzzzzztzzzMDzzzzzzzzzzzzzzzzzzzzzzzzzzzzz3zzzzgzzBzzzzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 1100/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: 
+Not according t
+  gen:  
+Not according tzzzzzzzzzTzzzzLzz!$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzCzzzDJzzezzzzzz'
+zzzzzzzzzzzzzzzzz;zzz,zzzz!zzzzzzzz
+
+Step 1150/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: n, sir?
+
+MENENIU
+  gen:  n, sir?
+
+MENENIUzzzzzzhzzzzzzzzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzpe3zzzzzzzzzzzzzzMzzzz!zzzzzzzzzzzz3z,z!
+zzO
+zzzzzzzS
+
+Step 1200/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: hed with the col
+  gen:  hed with the colzzzzzzz
+z zzzUzzz $zzzzzzzzzzzzzzzzzzzzzzzzzzzzz z:zzLzzzzzzzzzzjzzzzmzzzzzzzzzzzzzz;zzz
+$zzzzzzzzz
+
+Step 1250/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: think, there's o
+  gen:  think, there's ozzzzzzgzz,zzzlzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzz$zJz
+zzz zzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzzzIzzzz$zzzz
+
+Step 1300/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ore cause to be 
+  gen:  ore cause to be zzzzzzzzzzzzz
+zzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzzdzzzzz 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz!zzzz
+
+Step 1350/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: NIA:
+I know not 
+  gen:  NIA:
+I know not zzzzUNzzzzzzz
+zzz!!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzHzzzUzHz,zzzzzz'-zz!zzzzzzzzzzzzzzzzzzSzzzzz
+zzzzzzz
+
+Step 1400/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: t into his human
+  gen:  t into his humanzzzzzzozzzzzz
+
+zzz zzzzzzzzzzzzzzzzzzzzzzzzzz&zz?, zz
+zzzzzzzzzzdzz
+$,zzzzzzzzzzzzzzzz:zz3z
+
+zzzzzz!
+
+Step 1450/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ested
+At some ti
+  gen:  ested
+At some tizzzzz,zzzjzzz
+zzz!$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzkmzz'zzzzzz'-zzH zzzzzzzzzzzzjzzzzzzz:Xz.zzzzzzz
+
+Step 1500/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ixt doing them n
+  gen:  ixt doing them nzzzzzzgzz$zzzzzzzK$zzzzzzzzzzzzzzzzzzzzzzzzzzzzSOzzzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzzzzz zzzz
+
+Step 1550/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: eople,
+We do req
+  gen:  eople,
+We do reqzzzzzzhzzzzzzCzzzM zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzzzzzzzzzzzWzz
+$zzzzzzzzzzzzzz-zzzRzzz
+!zzzzzz
+
+Step 1600/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: iefest virtue, a
+  gen:  iefest virtue, azzzzzzhzzqzzz
+zzzN zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzzzzzzzzzzzjzz  zzzzzzzzzzzzzzzzzzzz
+zz
+zzzzzz
+
+Step 1650/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: he never stood
+T
+  gen:  he never stood
+Tzzzzz-gzz?zzz zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz&.zzz$zzzzzzzzzzjzz
+zzzzzzzzzzzzzzzGzzMzzzzz
+zzzzzzA
+
+Step 1700/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: onour!
+
+BRUTUS:
+  gen:  onour!
+
+BRUTUS:
+zzzzzzozzlzzz
+zzzM zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzzzzzzzzzzzdzz
+$zzzzzzzzzzzzzzzzz zz
+z
+
+zzzzzz
+
+Step 1750/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  in a block-head
+  gen:   in a block-headzzzzzzzzzlzzz
+zzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz!zzzzdzz.zzzzzz
+zzz
+zzzzzzzzzzzzzzzzzzzzzzz$
+zzzzzzz
+
+Step 1800/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: eep their teeth 
+  gen:  eep their teeth zzzzz-hzzzzzz3zzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz,z&zzzzz
+zzzzzzzzz
+Iz!zzzzzzzzzzzzzzzzzzzz zzzzzzzzz
+
+Step 1850/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: e is
+rather to h
+  gen:  e is
+rather to hzzzzzzzzzfzzz zzzzGzzzzzzzzzzzzzzzzzzzzzzzzzzizz:zzzQzzz
+zzzzzzzzzzz zzzzzzzzzzzzzzzzzvzz
+zzzzzzzzzz
+
+Step 1900/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: nd make him good
+  gen:  nd make him goodzzzzzzzzzrzzzzzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzz;HzzzUzzzzzzzzzzIzzzzzzzzzzzzzzzzzzzmzzzzzzz&jzzzDzzz
+
+Step 1950/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ivate;
+And with 
+  gen:  ivate;
+And with zzzzz?
+zzzzzzzzzz! zzzzzzzzzzzzzzzzzzzzzzzzzzzzz'Bzzzzzzzzzzzzzzzzzzz3zzzzzzzzzzzzzzzzz&zzzzzzzzzzzz
+
+Step 2000/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: t his contempt s
+  gen:  t his contempt szzzzz.hzz&zzz&zzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+.zzzzzzzzzzzzzz-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 2050/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ly he began to s
+  gen:  ly he began to szzzzzDhzzzzzzzMzzzFzzzzzzzzzzzzzzzzzzzzzzzzzzizzJzzz;zzzEzzzzzzzzzzzz
+zzzzzzzzzzzzzzzz;zz
+zzzzzJzzzz
+
+Step 2100/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: fe-guard he came
+  gen:  fe-guard he camezzzzz'ozzzzzz&zzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzCJzzzU3zzQzzzzzzzzzzzzzzzzzzzzzzzzzzzzz;zz
+zzzzzzzzzz
+
+Step 2150/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: t not a plot:
+Th
+  gen:  t not a plot:
+Thzzzzzzozzpzzz!zzzzDzzzzzzzzzzzzzzzzzzzzzzzzzzzzzHzzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzz,zzzzzzzzz
+
+Step 2200/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ch they have giv
+  gen:  ch they have givzzzzzzhzzzzzz'zzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzz'z;zzz;
+zzzzzzzz
+zz
+zzzzzzzzzzzzzzzz
+zzzKzzzzzzzzzzK
+
+Step 2250/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: e himself!
+It ma
+  gen:  e himself!
+It mazzzzzzzzzzzzz zzz! zzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzz zzzzzzzzVzz,zzzzzzzzzzzzzzzzzzzzzzzXzzzzzzz.
+
+Step 2300/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: RIOLANUS:
+No, ta
+  gen:  RIOLANUS:
+No, tazzzzzzzzz,zzz zzz!!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz!zzzzzz!$zzzzzzzzzz$3zzzzzzzzzzzzzzzzzzzzz$!zzzzzzzz
+
+Step 2350/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: vator,
+A foe to 
+  gen:  vator,
+A foe to zzzzz.ozzrzzz
+zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz!zzzzzzzzzzzzzzzWzz
+zzzzzzzzzzzzzzzzzzzzz-z
+
+zzzzzz
+
+Step 2400/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  authority,
+Or l
+  gen:   authority,
+Or lzzzzzzhzzrzzz
+zzz Hzzzzzzzzzzzzzzzzzzzzzzzzzzzzz$zzzzzzzzzzzzzzzWzzjzzzzzzzzzzzzzz!zzzzzzzz
+
+zzzzzz
+
+Step 2450/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: .
+
+CORIOLANUS:
+O
+  gen:  .
+
+CORIOLANUS:
+Ozzzzz?zzz&zzz zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz:zzzNz 
+zzzzzzzzWzzjzzzzzzzzzzzzzz!zzzzzzz
+zzzzzzzz
+
+Step 2500/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ant.
+
+SICINIUS:
+  gen:  ant.
+
+SICINIUS:
+zzzzzzhzzzzzz$zzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzzzdzzzzzzzjzz$
+zzzzzzzzzzzzzzzzz'
+z!z
+
+zzzzzz
+
+Step 2550/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: on, being of cat
+  gen:  on, being of catzzzzzzozzjzzz
+zzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzJzzzzzz!!zzzzzz.zzz&zzzzzzzzzzzzzzzzzzzzzzu
+zzzzzzzz
+
+Step 2600/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: me further, who 
+  gen:  me further, who zzzzzzhzz3zzz
+zzz $zzzzzzzzzzzzzzzzzzzzzzzzzzzzUOzzz:
+zz
+zzzzzzzzzz,zzzzzzzzzzzzzzz$zzzzz
+z zzzDzzzz
+
+Step 2650/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: extremities spea
+  gen:  extremities speazzzzzzhzz,zzz
+zzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzXzzzz&zzzzzzzzzzMzz'zzzzzzzzzzzzzzgzzzzQz$zz
+zzzzzz
+
+Step 2700/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: the stones--for 
+  gen:  the stones--for zzzzzzf:zlzzz&zzzK
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzzHz
+zzz!SzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzVzzzz zzzz
+
+Step 2750/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ast said
+My prai
+  gen:  ast said
+My praizzzzzzfzzzzzz!zzzK zzzzzzzzzzzzzzzzzzzzzzzzzzzzzCz.z
+zzzzzzzzzzzMzz!zzzzzzzzzzzzzzzzzzzzzzz
+Bzzzzzzz
+
+Step 2800/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: em accuse me by 
+  gen:  em accuse me by zzzzz&zzz;zzz
+zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz Azzzzzz
+zzzzzzzzzz zzzzzzzzzzzzzzzzzzzzzzz$zzzzzzzz
+
+Step 2850/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: I do beseech you
+  gen:  I do beseech youzzzzzzzzzrzzz
+zzz Izzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzzP!zzzzzzzzzz!3zzzzzzzzzzzzzzzzzzzzzz$zzzDzzzz
+
+Step 2900/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: wind
+Yourself in
+  gen:  wind
+Yourself inzzzzz'ozzlzzz Nzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzIzzzzz 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzzz
+
+Step 2950/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  on the minister
+  gen:   on the ministerzzzzzzzzzzzzz
+zzz Dzzzzzzzzzzzzzzzzzzzzzzzzzzzzz'zzzzdzz'zzzzzz'&zi
+zzzzzzzzzzzzzz
+zzzzzzzzz
+zzzzzzz
+
+Step 3000/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: :
+There is a wor
+  gen:  :
+There is a worzzzzzzozzzzzz
+zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzz$z'zzzzzzz'zzzzzz!&z
+z3
+zzzzzzzzzzzz
+z
+zzzzzzz
+zzzzzzz
+
+Step 3050/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: table strokes,
+A
+  gen:  table strokes,
+Azzzzz?zzz3zzz$
+zzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzzz'zzzzzz,&zzzz zzzzzzzzzzzzzzzzPzzzzz!zzzzzzz
+
+Step 3100/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: S:
+Now we have s
+  gen:  S:
+Now we have szzzzzzzzzzzzz3-zzN zzzzzzzzzzzzzzzzzzzzzzzzzzzzz'zzzzzzz'zzzzzz'.zz&z zzzzzzzzzzzzzzzzszzzzz$zzzzzzz
+
+Step 3150/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: IA:
+Now, pray, s
+  gen:  IA:
+Now, pray, szzzzzzfzz$zzz:$zzzDzzzzzzzzzzzzzzzzzzzzzzzzzzzzJJzzz;zzz'zzzzzz3xzzzzDzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzz
+
+Step 3200/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: man:
+The main bl
+  gen:  man:
+The main blzzzzzzozzzzzz:Mzzz'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzCz;zzzzj
+zzzzzzzzzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 3250/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: e fair edifices 
+  gen:  e fair edifices zzzzzDzzzqzzz,zzzN zzzzzzzzzzzzzzzzzzzzzzzzzzzzFJzzzzzzzzzzzzzzC-zznzzzzzzzzzzzzzzzz'zzzzzzzzzzzzzzz
+
+Step 3300/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: e porter his eye
+  gen:  e porter his eyezzzzzzhzzUzzz?zzzzEzzzzzzzzzzzzzzzzzzzzzzzzzzzzzez
+zzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzqzzzz$zzzz
+
+Step 3350/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ere, sir: I'ld h
+  gen:  ere, sir: I'ld hzzzzz$zzzzzzzFfzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzHzzzUzzzzzzzzzzCzzz!zzzzzzzzzzzzzzzzzzzzzzz,
+zzzzzzz
+
+Step 3400/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: hee, that wilt r
+  gen:  hee, that wilt rzzzzzzzzzzzzz MzzM!zzzzzzzzzzzzzzzzzzzzzzzzzzzzFHzzzUzzz zzzzzzzzzz z
+zzzzzzzzzzzzzzzzUzz
+zzzzzJzzzz
+
+Step 3450/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  me out
+Twelve s
+  gen:   me out
+Twelve szzzzzz
+zzzzzz
+zzzMEzzzzzzzzzzzzzzzzzzzzzzzzzzzzz zz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzz
+&zzzzzz!
+
+Step 3500/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: f face, methough
+  gen:  f face, methoughzzzzzzgzzzzzz zzzKEzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zIz
+zzz zzzzzzzzzzzzzzzzzzzzzzzzzzzlzzzzzzzzzzzzzzzzz
+
+Step 3550/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ws?
+
+Third Servi
+  gen:  ws?
+
+Third ServizzzzzzzzzzzzzzzzzK zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzfzzBzzzzzz!zzz $zzzzzzzzzzzzzzzzzzzzzzz,zzzzzzz
+
+Step 3600/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  far as
+day does
+  gen:   far as
+day doeszzzzzzhzzzzzz .zzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzz.zz?zzzzzzzzzzD  zzzzzzzzzzzzzz3Dzzz
+zzzzzzzzzz
+
+Step 3650/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: 
+BRUTUS:
+God-den
+  gen:  
+BRUTUS:
+God-denzzzzzz
+zzrzzz
+zzzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzz:zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzz$zzz!zz3z
+zzzzzzz.
+
+Step 3700/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: to whip your inf
+  gen:  to whip your infzzzzzzozz&zzz
+zzz $zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzAjzzzzzzzzzzzzzzzzzzzzzzzzzz&zzzzzzzTzzzzzzzz 
+
+Step 3750/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ow, your news?
+Y
+  gen:  ow, your news?
+Yzzzzzzzzznzzz
+zzz Hzzzzzzzzzzzzzzzzzzzzzzzzzzzzz!zzzzzzzzzzzzzzzzzz zzzzzzzzzzzzzzzzzzzzzzz
+
+zzzzzz
+
+Step 3800/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: e brought it.
+
+M
+  gen:  e brought it.
+
+Mzzzzzzozzzzzz-zzzM!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzzzqzzzzzzzjzzDzzzzzzzzzzzzzzzzzzz.zXz
+,zzzzzz'
+
+Step 3850/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: zen:
+So did we a
+  gen:  zen:
+So did we azzzzzzhzz$zzz,zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzJzzzUzD
+Fzzzzzzzdzz
+
+zzzzzzzzzzzzzDazzzzzz
+zzzzzzzzz
+
+Step 3900/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: heir people
+Will
+  gen:  heir people
+Willzzzzz&zzzlzzzzzzzMHzzzzzzzzzzzzzzzzzzzzzzzzzzzzz'zzzlzzz zzzzzzB-zz&zzzzzzzzzzzzzzzzzSzzz;zz
+zzzzzzz
+
+Step 3950/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: tance, and the d
+  gen:  tance, and the dAzzzzzozz$zzz zzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzQdzzz
+zz3
+zzzzzzzzzi
+3
+zzzzzzzzzzzzzF
+
+zzz
+zzzzzDzzzz
+
+Step 4000/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: :
+Yet your good 
+  gen:  :
+Yet your good zzzzzzozz&zzz!zzz!Hzzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzzzzzzzzzzzzzz-$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz 
+
+Step 4050/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: t Senator:
+You m
+  gen:  t Senator:
+You mzzzzzzfzzzzzz!zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzVezzzzzz;!zzzzzz3zzz!zzzzzzzzzzzzzzzzzz?zzzu
+zzzzzzzz
+
+Step 4100/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: when you have pu
+  gen:  when you have puzzzzzzhzzxzzz
+zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzOz
+zzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzz zzzz
+
+Step 4150/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: come to
+thee; bu
+  gen:  come to
+thee; buzzzzzzozzzzzz:zzz!Hzzzzzzzzzzzzzzzzzzzzzzzzzzzzz:zzzzzzzzzzzzzzzzzz!3zzzzzzzzzzzzzzzzzz
+zzz
+'zzzzzz
+
+Step 4200/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: 
+
+Second Senator
+  gen:  
+
+Second Senatorzzzzzz
+zz
+zzz
+zzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzzzzzzzzzzzWzz
+$zzzzzzzzzzzzz!zzzzzzz:
+zzzzzzz
+
+Step 4250/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ough Rome and ha
+  gen:  ough Rome and hazzzzzzfzzozzz
+zzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzOzzzz zzzzzzzzzzjzz
+$zzzzzzzzzzzzzz.zzzzz-z
+
+zzzzzz
+
+Step 4300/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: May show like al
+  gen:  May show like alzzzzzzfzzlzzz
+zzzM!zzzzzzzzzzzzzzzzzzzzzzzzzzzzGJzzzzzzz
+zzzzzzzzzz
+zzzzzzzzzzzzzzzzzz zzzzlzzzJzzzz
+
+Step 4350/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: t capital: thou 
+  gen:  t capital: thou zzzzzzzzzzzzz
+zzzNHzzzzzzzzzzzzzzzzzzzzzzzzzzzz,IzzzUzzz!zzzzzzL;zz!zzzzzzzzzzzzzzzzzzzzzzzz'zzzzzzz
+
+Step 4400/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  thee and cry 'B
+  gen:   thee and cry 'Bzzzzz&zzzzzzz
+ zzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzoIzzzSzBz!zzzzzzIyzzzz
+zzzzzzzzzzzzzzJzzzzz z
+zzzJzzz
+
+Step 4450/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  would have
+But 
+  gen:   would have
+But zzzzzAzzzzzzz
+
+zzz'zzzzzzzzzzzzzzzzzzzzzzzzzzzzGIzzz
+zzz!zzzzzz3.zzzz
+zzzzzzzzzzzzz
+zzSzzz!z
+zzzzzzz
+
+Step 4500/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ible for you to 
+  gen:  ible for you to zzzzzzzzz$zzz
+
+zzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzz'zzzzzzz!zzzzzzFxzz
+$
+zzzzzzzzzzzzzzJ-z
+pzzp
+zzzzzzz
+
+Step 4550/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: d down, all swea
+  gen:  d down, all sweazzzzzzzzz zzz
+
+zz !zzzzzzzzzzzzzzzzzzzzzzzzzzzzzdzzzzzzzczzzzzzNzzzk 
+zzzzzzzzzzzzzzzzUzzzuzzzzzzzzz
+
+Step 4600/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: lcome!
+
+AUFIDIUS
+  gen:  lcome!
+
+AUFIDIUSzzzzzzfzzzzzz'zzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzlz:zzzzz
+zezzzzzz!
+zzzzzzzzzzzzzzzzzAzzz zzzz$ zzzzzzz
+
+Step 4650/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: signments
+In min
+  gen:  signments
+In minzzzzz&ozz;zzzzzzzM zzzzzzzzzzzzzzzzzzzzzzzzzzzzUOzzzUz$zzzzzzzzzdzzzzzzzzzzzzzzzzzzGzzzzzzzzzzzzzzz'
+
+Step 4700/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: king a treaty wh
+  gen:  king a treaty whzzzzzzgzzqzzz-zzz!Dzzzzzzzzzzzzzzzzzzzzzzzzzzzzz3zzzz&zzzzzzzzzz
+zzzzzzzzzzzzzzzzzlzFzzzzzzzazzzzzzX
+
+Step 4750/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: u hast made my h
+  gen:  u hast made my hzzzzzzzzz3zzzlzzz! zzzzzzzzzzzzzzzzzzzzzzzzzzzDzdzzzzzzfBzzzzzz zzzz!zzzzzzzzzzzzz-zzzzzxztzzzzzzzzz
+
+Step 4800/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: rds, when you sh
+  gen:  rds, when you shzzzzzzzzzzzzzqzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzCzzzzzzL
+zzzzzzzzzzz$zzzzzzzzzzzzzzz
+zzzzz$Wzzzzzzzz
+
+Step 4850/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ton ambling nymp
+  gen:  ton ambling nympzzzzzz
+zzkzzz
+zzz!!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzdzzzzzzzzz
+-zzzzzzzzzzzzzzzzz$zzzzzzzzz!zzzzzzz
+
+Step 4900/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  after prophecie
+  gen:   after propheciezzzzz&gzz zzzzzzz Hzzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzz$zzVzzzzzzzzzzzz!zzzzzzzzzzzzzzzSzzz
+z
+ zzzzzz
+
+Step 4950/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: Is wise and virt
+  gen:  Is wise and virtzzzzz.fzzjzzzUzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzzzzzzzzzUzzzzzzzzzzzzzzzzzzzzzzzzz 
+zzzzzzzA
+
+Step 5000/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  your lordship b
+  gen:   your lordship bzzzzzzgzzqzzzTzzz IzzzzzzzzzzzzzzzzzzzzzzzzzzzzzCzzzz
+zzzzzzzzzzMzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzzzzz-
+
+Step 5050/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ey are gone, the
+  gen:  ey are gone, thezzzzzzzzzmzzzmzzz HzzzzzzzzzzzzzzzzzzzzzzzzzzzzzIzzzzzzkOzzzzzz3zz!z
+zzzzzzzzzzzzzzbzzzzzzu$zzzzzzzz
+
+Step 5100/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: aul,
+I'll make a
+  gen:  aul,
+I'll make azzzzzzozzrzzzTzzzzFzzzzzzzzzzzzzzzzzzzzzzzzzz:zz:zzzzzzzzzzzzzzF-zzzzzzzzzzzzzzzzz
+zOzzzzz
+zmzzzzzzz
+
+Step 5150/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: of God nor man:
+  gen:  of God nor man:
+zzzzzzhzz&zzzz
+zzMHzzzzzzzzzzzzzzzzzzzzzzzzzzzzz zfzzzzzzzzzzzz'
+zzzz
+zzzzzzzzzzzzzzzzzzzzz&!zzzzzzz
+
+Step 5200/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: I grant ye.
+
+LAD
+  gen:  I grant ye.
+
+LADzzzzzzzzzzzzzz zz!Dzzzzzzzzzzzzzzzzzzzzzzzzzzzzz!zzzzzzzzzzzzzzzzzzzzTzzzzzzzzzzzzzzzzszzz zzzzzzzzz
+
+Step 5250/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  would I were, t
+  gen:   would I were, tzzzzz:fzz&zzzTzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzezzz
+zzzzzzzzzzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzZzzzzzz.
+
+Step 5300/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: what these sorro
+  gen:  what these sorrozzzzzzhzznzzzTzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz'zzzzzzzezzzzzz'&zzzzzzzzzzzzzzzzzzzzzzzzzz!Gzzzzzzz
+
+Step 5350/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: STER:
+Vouchsafe 
+  gen:  STER:
+Vouchsafe zzzzzzzzzzzzzzzzz!
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzz
+zzzzzzzzzzzjzzz
+zzzzzzzzzzzzzzzzzz:zzzzjzzzzzz.
+
+Step 5400/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: all the world to
+  gen:  all the world tozzzzzzhzznzzzkzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzfzzz-zzz zzzzzzzzz&z$zzzzzzzzzzzzzzOzz?zz
+zzzzzzzzzz
+
+Step 5450/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: young and his mi
+  gen:  young and his mizzzzzzhzz!zzz zzz IzzzzzzzzzzzzzzzzzzzzzzzzzzzzoOzzzzzzzzzzzzzz,zzzzzzzzzzzzzzzzzzzzzzzzzztzzzzzzzzz
+
+Step 5500/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: forsooth, am ste
+  gen:  forsooth, am stezzzzzzhzzzzzzUzzzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzDHzzzzzzzEzzzzzzzzziz3zzzzzzzzzzzzzzz!zLzzzzzzzzJzzzz
+
+Step 5550/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: Myself disgraced
+  gen:  Myself disgracedzzzzzzgzzzzzz!zzzK$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzJzzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzhzzzz!zzzz
+
+Step 5600/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: aid
+I will avouc
+  gen:  aid
+I will avouczzzzzzgzzzzzzFzzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzzHz
+zzz
+zzzzzzz'zzzzzzzzzzzzzzzzzzzzJ
+zzzzzyzzzzzzzzz
+
+Step 5650/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ER:
+If I should 
+  gen:  ER:
+If I should zzzzzzzzzkzzzDzzzM zzzzzzzzzzzzzzzzzzzzzzzzzzzzzezzzUz.
+:zzzzzzzdzz!zzzzzzzzzzzzzzzzzzzzzzHzzzzzzzz
+
+Step 5700/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: nt.
+
+HASTINGS:
+O
+  gen:  nt.
+
+HASTINGS:
+O
+zzzz'hzz-zzz
+zzzMEzzzzzzzzzzzzzzzzzzzzzzzzzzzzzCzzzzzzzzzzzzzzzzzz!zzzzzzzzzzzzzzzzzz$zz,z
+3zzzzzz
+
+Step 5750/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: shalt hear me.
+I
+  gen:  shalt hear me.
+Izzzzzzzzzozzz
+zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzHzzz-zzz.zzzzzzI.zz zzzzzzzzzzzzzzzzzzzzzz$z
+zzzzzzz
+
+Step 5800/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  you! you have a
+  gen:   you! you have azzzzzzzzz,zzz
+&zzz'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzBzzzz&zzbzzzzzzzjzz-z;zzzzzzzzzzzzzz'zzgz&z
+ zzzzzz
+
+Step 5850/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: e!
+Thy garments 
+  gen:  e!
+Thy garments zzzzzzzzz,zzz
+zzz Hzzzzzzzzzzzzzzzzzzzzzzzzzzzz!HzzzUz z,zzzzzzz
+zzHzzzzzzzzzzzzzzz &zzzzzzzzzzzzzz
+
+Step 5900/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: pray for them th
+  gen:  pray for them thzzzzzzhzzlzzz.zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzdzzzz&zzzzzzzzzzMzzpzzzzzzzzzzzzzzzzz!z zzz
+zzzzzzzX
+
+Step 5950/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: nd not our tongu
+  gen:  nd not our tonguzzzzzzzzzmzzzTzzzK zzzzzzzzzzzzzzzzzzzzzzzzzzzzzCzzzzz;zzzzzzzzzzzzGzzzzzzzzzzzzzzzzzzzzzzzzIzzzzzz
+
+Step 6000/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: tom of the deep,
+  gen:  tom of the deep,zzzzzzzzznzzz
+zzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzzzFzzzzzz$-zz 
+zzzzzzzzzzzzzzzzzQzzzzz
+zzzzzzz
+
+Step 6050/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: against my soul,
+  gen:  against my soul,zzzzzzozz,zzz
+zzzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzzHzzzUzz? zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzDzzzz
+
+Step 6100/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: he judgment-day.
+  gen:  he judgment-day.zzzzzzhzz$zzz
+zzzzDzzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzQzzz:zzzzzz,zzzzzzzzzzzzzzzzzzzzzzQzzz z zzzzzzz
+
+Step 6150/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ps it: it
+is tur
+  gen:  ps it: it
+is turzzzzzzgzzzzzz
+LzzK$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz:zzzzz! .zzzzzzzzzzz3
+zzzzzzzzzzzzzzzz;zzzzzzzzzzzz3
+
+Step 6200/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: 
+First Murderer:
+  gen:  
+First Murderer:zzzzzzzzzzzzzzzzzNDzzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzzzz
+
+Step 6250/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: NCE:
+Alas! for w
+  gen:  NCE:
+Alas! for wzzzzzzgzzqzzzzzzz Fzzzzzzzzzzzzzzzzzzzzzzzzzzzz&Oz
+zzzzzzzzzzzzIwzzzzzzzzzzzzzzzzzzH?z-zzzzz zzzzzzz
+
+Step 6300/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: annot be; for wh
+  gen:  annot be; for whzzzzzzhzzzzzzzzzz  zzzzzzzzzzzzzzzzzzzzzzzzzzzzzDzzzzzzzzzzzzzz$.zzz3;zzzzzzzzzzzz&zzzzzzz
+zzzzzDzzz
+
+Step 6350/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: , and tell him w
+  gen:  , and tell him wzzzzzzozzTzzzzzzz!IzzzzzzzzzzzzzzzzzzzzzzzzzzzDz:zzzzzzzzzzzzzzzMzzzz
+zzzzzzzzzzzzzzzzzzzuzzzzzzzzz 
+
+Step 6400/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  EDWARD IV:
+Now,
+  gen:   EDWARD IV:
+Now,zzzzzzzzzkzzzkzzz  zzzzzzzzzzzzzzzzzzzzzzzzzzzzzJzzzzzzz$zzzzzzzzzzz3zzzzzzzzzzzzzzzzzM!zzzzzzzJzzzz
+
+Step 6450/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: and, Lord Grey, 
+  gen:  and, Lord Grey, zzzzzzzzzzzzz'zzzM'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzJzzzzz
+Czzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzzzz$zzzz
+
+Step 6500/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: to-day a righteo
+  gen:  to-day a righteozzzzz?hzzTzzzCzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+.zzzCzzzzzz'&z$
+zzzzzzzzzzzzzzzzzzzzzzzz zzzzzzz
+
+Step 6550/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: Clarence' death?
+  gen:  Clarence' death?zzzzzz
+zzzzzz!
+zzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzzzzzzzzzMzzdz zzzzzzzzzzzzWzzzzzGzz
+ zzzzzz 
+
+Step 6600/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ink it. Hark! wh
+  gen:  ink it. Hark! whzzzzzzhzz-zzzYzzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzezzzVz.
+zzzzzzzz
+zzz
+zzzzzzzzzzzzzzzzz?zzzzzzzzzzzz
+
+Step 6650/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: urrents to mine 
+  gen:  urrents to mine zzzzzzzzz,zzz-zzz Dzzzzzzzzzzzzzzzzzzzzzzzzzzz&z zzzzzzzjzzzzzzz
+zzzzzzzzzzzzzzzzzyzzzzzzzzzGzzzzzzX
+
+Step 6700/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: l of us have cau
+  gen:  l of us have cauzzzzzz
+zz$zzzTzzz! zzzzzzzzzzzzzzzzzzzzzzzzzzzlz zzzzzzpNzzzzzzzzzzzzzzzzzzzzzzzzzAzzzzzzzzzzzzzzzzz
+
+Step 6750/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ould fetch the p
+  gen:  ould fetch the pzzzzzzzzzjzzzzzzzNDzzzzzzzzzzzzzzzzzzzzzzzzzzzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 6800/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: nry the Sixth
+Wa
+  gen:  nry the Sixth
+Wazzzzzzzzzqzzzzzzz $zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzzozzzzzzzzzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 6850/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ey be to-night:
+  gen:  ey be to-night:
+zzzzzzozzrzzz!zzzzDzzzzzzzzzzzzzzzzzzzzzzzzzzzzzCzIzzzzzzzzzzzzFxzzz3zzzzzzzzzzzzzzzzzAzzzzz&zzzzzzz
+
+Step 6900/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: she, I cannot te
+  gen:  she, I cannot tezzzzzzzzzzzzzz,zzK!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzDzzzzzzzWzzzzzzzzzz&zfzzzzzzzzzzzz
+zzzzzdzz
+zzzzzzz'
+
+Step 6950/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: DUCHESS OF YORK:
+  gen:  DUCHESS OF YORK:zzzzzz
+zz$zzzjzzzM!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzznzzzzzzzVzz.zzzzzzzzzzzzzz?zzzzzz-z
+zzzzzzz
+
+Step 7000/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: NGS:
+On what occ
+  gen:  NGS:
+On what occzzzzzzfzzmzzzjzzzzGzzzzzzzzzzzzzzzzzzzzzzzzzzzz,ezzzzzzz
+zzzzzz!zzzz!zzzzzzzzzzzzzz!zzzzzzzzzzzzzzzz
+
+Step 7050/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: re shall we sojo
+  gen:  re shall we sojozzzzzzzzzkzzzTzzz HzzzzzzzzzzzzzzzzzzzzzzzzzzzzzHzzzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 7100/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: CE EDWARD:
+Ay, b
+  gen:  CE EDWARD:
+Ay, bzzzzzzozzUzzz'zzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz'zzzzzzd
+zzzzzz-zzz!3zzzzzzzzzzzzzzzCJzzzz$Dzzzzzzzz
+
+Step 7150/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  me on your shou
+  gen:   me on your shouzzzzzz
+zzjzzz
+zzz!$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz:zzzzzzzWzzzzzzz
+zz
+zzzzzzzzzzzzzzzzzzz zz;
+zzzzzzz
+
+Step 7200/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  him.
+
+BUCKINGHA
+  gen:   him.
+
+BUCKINGHAzzzzz'zzzqzzz
+zzzz'zzzzzzzzzzzzzzzzzzzzzzzzzzzzz,z:zzzzU
+zzzzzz-zzz
+$zzzzzzzzzzzzzzzzzzzzz$Hzzzzzzzz
+
+Step 7250/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ay digest our co
+  gen:  ay digest our cozzzzzzzzzkzzz
+zzzN$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzOzzz;zzz,zzzzzzF;zz
+zzzzzzzzzzzzzzzzzzzzzzzz zzzzzzz
+
+Step 7300/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: his our totterin
+  gen:  his our totterinzzzzz;gzzUzzzL
+zzzGzzzzzzzzzzzzzzzzzzzzzzzzzzzzzOzzzzzzzzzzzzzzNzznz$zzzzzzzzzzzzzzzzzzzzzu
+zzzzzzzz
+
+Step 7350/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: .
+
+HASTINGS:
+I k
+  gen:  .
+
+HASTINGS:
+I kzzzzzzhzzkzzz
+zzzM zzzzzzzzzzzzzzzzzzzzzzzzzzzzzJzzzzz
+Kzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzzzzzzz
+
+Step 7400/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ent!
+
+HASTINGS:
+  gen:  ent!
+
+HASTINGS:
+zzzzzzhzz&zzzEzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzhezzz;z&!zzzzzzzzMzz
+$zzzzzzzzzzzzz
+zzz;zzz
+zzzzzzzz'
+
+Step 7450/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: chard. O, rememb
+  gen:  chard. O, remembzzzzzzozz,zzz$zzzMDzzzzzzzzzzzzzzzzzzzzzzzzzzzzz;zzzzzzOpzzzzzzzjzz
+zzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzz
+
+Step 7500/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  come upon your 
+  gen:   come upon your zzzzzzgzzfzzz
+zzzNDzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzz &xzzzzzzzzzz zzzzzzzzzzzzzzzzzz$zzzozzzzzzzz
+
+Step 7550/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: I say.
+
+GLOUCEST
+  gen:  I say.
+
+GLOUCESTzzzzzzzzzzzzz!zzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzCzzzzzzz
+zzzzzz!,zz
+zzzzzzzzzzzzzzzzzzzzzzz
+
+zzzzzzz
+
+Step 7600/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: d!
+
+RATCLIFF:
+Di
+  gen:  d!
+
+RATCLIFF:
+Dizzzzzzozz$zzz!KzzK$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzHzzzzzzz&zzzzzzzzzzz 
+zzzzzzzzzzzzzzzzzzzzu
+zzzzzzzz
+
+Step 7650/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  of that ignoble
+  gen:   of that ignoblezzzzzzgzzxzzzTzzzN$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz:zzzzzz
+-zzzzzzzzzQzzzzzzzzzzzzzzz
+zzzzzzzzzzzzzzzzz
+
+Step 7700/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: son;
+That you mi
+  gen:  son;
+That you mizzzzzzzzzrzzzzzzzzIzzzzzzzzzzzzzzzzzzzzzzzzzzzzzdzzzSz3z:zzzzzzz
+zzz
+zzzzzzzzzzzzzz!zzzzzzzzzzzzzzzz
+
+Step 7750/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: 
+
+BUCKINGHAM:
+Fe
+  gen:  
+
+BUCKINGHAM:
+Fezzzzz?fzzqzzz3zzz $zzzzzzzzzzzzzzzzzzzzzzzzzzzzzczzzz&zzzzzzzzzz!zzkzzzzzzzzzzzzzzz zzzzzzzzVzzzzzzX
+
+Step 7800/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: 
+And his contrac
+  gen:  
+And his contraczzzzzzzdzlzzz
+zzzK zzzzzzzzzzzzzzzzzzzzzzzzzzzzz!zzzzdzz
+zzzzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzz-
+zzzzzzz
+
+Step 7850/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: t they speak?
+
+B
+  gen:  t they speak?
+
+Bzzzzzzzzzzzzzz$zzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzzJzzzzzzzJzzzzzzByzzz$
+zzzzzzzzzzzzz
+'zzzzzzz$zzzzzzz
+
+Step 7900/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: uld this graciou
+  gen:  uld this graciou
+zzzzzzzzzzzz;zzzMIzzzzzzzzzzzzzzzzzzzzzzzzzzzzNJzzzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzmzzzzzzzzz
+
+Step 7950/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ght please your 
+  gen:  ght please your zzzzzzzzzfzzz
+zzzN zzzzzzzzzzzzzzzzzzzzzzzzzzzzzHzzzUzzzwzzzzzzzzzz
+zzzzzzzzzzzzzzz$zz'zz
+z
+zzzJzzzz
+
+Step 8000/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  first,
+And then
+  gen:   first,
+And thenzzzzzzfzztzzz
+zzzMDzzzzzzzzzzzzzzzzzzzzzzzzzzzzz!zzzzzzzzzzzzzzIxzz!zzzzzzzzzzzzzzzzzzzzzzz
+ zzzzzzz
+
+Step 8050/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  got
+This Edward
+  gen:   got
+This Edwardzzzzzzzzzzzzzz
+zzz'zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzQzzz
+zzzzzzzzzzzz
+zzzzzzzzzzzzzzzzzzz
+zzzzzzzzzz
+
+Step 8100/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: oul.
+Cousin of B
+  gen:  oul.
+Cousin of Bzzzzzz
+zzrzzz zzzNIzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzzzzzzzzzzz,
+zzzzzzzzzzzzzzzzzzzz,z
+zzzzzzz
+
+Step 8150/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ray you, by your
+  gen:  ray you, by yourzzzzzzhzzrzzzTzzzzFzzzzzzzzzzzzzzzzzzzzzzzzzzzzz'zzzzczzTzzzzzz',zz:zzzzzzzzzzzzzzzzzzzzzzzz!zzzzzzz
+
+Step 8200/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: nd make me die t
+  gen:  nd make me die tzzzzzzgzz;zzz?-zzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzdzzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzgzzzzzzzzzzzz'zzzz
+
+Step 8250/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: curse,
+Which eve
+  gen:  curse,
+Which evezzzzzzgzzzzzzDzzzMDzzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzzNBzzzzzzzzzz!zzzzzzzzzzzzzzzzzzzCzZz
+zzzDzzzz
+
+Step 8300/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ,
+That Edward st
+  gen:  ,
+That Edward stzzzzzzzzzyzzz
+zzz!$zzzzzzzzzzzzzzzzzzzzzzzzzzzzAHzzzzzzzrzzzzzz$wzz
+$zzzzzzzzzzzzzzzOzzzzzzz$zzzzzzz
+
+Step 8350/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  close.
+Inquire 
+  gen:   close.
+Inquire zzzzzzozzTzzzz zzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzz:zzzzzzzzzzzzzzzzzzz
+
+zzzzzzzzzzzzzzzz zzzz
+$zzzzzz 
+
+Step 8400/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: t is fled to Ric
+  gen:  t is fled to Riczzzzzzgzz zzz,zzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzzzzzzzzzzzWzzz3zzzzzzzzzzzzzzzzzzzzAz
+zzzzzzzz
+
+Step 8450/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: oublest me; am n
+  gen:  oublest me; am nzzzzzzfzzazzzTzzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzz!zzzzzzz
+zzzzzzzzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 8500/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: But how or in wh
+  gen:  But how or in whzzzzzzozzzzzzzzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz!zzzzdzzzzzzzzz!zzzzzzzzzzzzzzzzzzzz:zzzzzz zzzzzzzz
+
+Step 8550/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ung princes! ah,
+  gen:  ung princes! ah,zzzzzzhzz,zzzzzzzzGzzzzzzzzzzzzzzzzzzzzzzzzzzzzz!z.zzzzzzzzzzzz!&zzzzzzzzzzzzzzzzzzzzzzzzzz$zzzzzzzz
+
+Step 8600/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: DUCHESS OF YORK:
+  gen:  DUCHESS OF YORK:zzzzzzhzzzzzzzzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzCzzzzzzz$zzzzzzzzzz zzzzzzzzzzzzzzzz
+zSzzzzzzzzzzzzz
+
+Step 8650/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: H:
+O, thou didst
+  gen:  H:
+O, thou didstzzzzzzhzz$zzz!zzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzdzzzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzzzz$zzzz
+
+Step 8700/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  queen of sad mi
+  gen:   queen of sad mizzzzzzozz3zzz'zzzzFzzzzzzzzzzzzzzzzzzzzzzzzzzzzVIzzzUzzI
+zzzzzzzzzz
+zzzzzzzzzzzzzzzz
+Lzzz
+z
+zzzzzzzz
+
+Step 8750/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  Clarence?
+And l
+  gen:   Clarence?
+And lzzzzzzzzzpzzz
+zzzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzz z:z
+EzzzzzzzzzzWzz
+zzzzzzzzzzzzzzzzzzzzzzz
+ zzzzzzz
+
+Step 8800/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: in your sight,
+L
+  gen:  in your sight,
+Lzzzzzzhzz zzz!zzzKHzzzzzzzzzzzzzzzzzzzzzzzzzzzzzHzzzzz czzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz!zzzz!zzzz
+
+Step 8850/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: not her birth, s
+  gen:  not her birth, szzzzzzfzz3zzz
+zzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzilz'zzzz.zzzzzzzzzzjzz 
+zzzzzzzzzzzzzzzzzzzz
+z
+'zzzzzz 
+
+Step 8900/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: o lose their hea
+  gen:  o lose their heazzzzzzozzjzzz
+Fzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz:zzzzzzSzzzzzzzzzzz$3
+zzzzzzzzzzzzzzzzz&zzz
+
+zzzzzz 
+
+Step 8950/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: A pair of bleedi
+  gen:  A pair of bleedizzzzzzozzqzzz
+zzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzCz&zzzA!zzzzzzzzzzz zEzzzzzzzzzzzzzzzzzzzz-z-zzzzzz
+
+Step 9000/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ge.
+The loss you
+  gen:  ge.
+The loss youzzzzzzzzzUzzz!zzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz  zzzzzz,zzzzzzIzzz$zzzzzzzzzzzzzzz:
+zzzzzzz
+zzzzzzz
+
+Step 9050/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: e by this allian
+  gen:  e by this allianzzzzzzzzz;zzz
+ zzKDzzzzzzzzzzzzzzzzzzzzzzzzzzzzIJzzzVz!zzzzzzzzzMzzbz&zzzzzzzzzzzzz,zzzzzzzzzzzzzzz$
+
+Step 9100/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: rofaned, hath lo
+  gen:  rofaned, hath lozzzzzzgzzzzzznzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzz.Jz
+zzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzTzzzzzzzzz
+
+Step 9150/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: Heaven and fortu
+  gen:  Heaven and fortuzzzzzzzzzzzzz$zzzM zzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzzdzzAzzzzzzzzzz
+zzzzzzzzzzzzzz'zzzzzzQz$ zzzzzzz
+
+Step 9200/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: hrong many doubt
+  gen:  hrong many doubtzzzz
+zhzzezzz $zzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzz$zzz
+zzzzzzzzzzN$ zzzzzzzzzzzzzz$zzzzz zzzzJzzzz
+
+Step 9250/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  up by Dorset, B
+  gen:   up by Dorset, BzzzzzLozzlzzz
+zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzz zUzzzzzz!zzzzzzzzzzzzzzzzzzzzzz.zzz
+z
+zzzzzzz
+
+Step 9300/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ereign, now in D
+  gen:  ereign, now in Dzzzzzzozzzzzz
+
+zz $zzzzzzzzzzzzzzzzzzzzzzzzzzzzzCzzzzdzzUzzzzzz!,zizzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzzz
+
+Step 9350/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ews: that the Ea
+  gen:  ews: that the Eazzzzzzzzzzzzz!
+zzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzBz zzzzzzzUzzzzzz,zzzz3,zzzzzzzzzzz;zzzzzzzz?z
+zzzzzzz
+
+Step 9400/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ws, is it not?
+
+  gen:  ws, is it not?
+
+zzzzzzfzzzzzz$
+zzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz'zzzhzzz zzzzzzCzzzz &zzzzzzzzzzzzzzzz.zz;z?
+zzzzzzz
+
+Step 9450/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: usand swords,
+To
+  gen:  usand swords,
+ToBzzzzzzkzzzzz
+
+zzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzJzz zzzzzz'xzzzz zzzzzzzzzzzzzzzzzzzzz
+Pzzzzzzz
+
+Step 9500/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: d part in just p
+  gen:  d part in just pzzzzzzhzzzzzz
+
+zzM$zzzzzzzzzzzzzzzzzzzzzzzzzzzlzHzzzzzzz zzzzzz
+;zzzz
+zzzzzzzzzzzzzzgzzzzzzz
+zzzzzzz
+
+Step 9550/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: is power
+Before 
+  gen:  is power
+Before zzzzzEzzzzzzz
+
+zzM zzzzzzzzzzzzzzzzzzzzzzzzzzzzzIzzz;z$!zzzzzzzzjzz&z
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 9600/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: e leisure and th
+  gen:  e leisure and thzzzzzzhzzqzzz
+zzzN zzzzzzzzzzzzzzzzzzzzzzzzzzzzFOzzzzzzf zzzzzz'zzzgzzzzzzzzzzzzzzzzzzzzzzuzzzzzzzzz
+
+Step 9650/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: e myself. Wheref
+  gen:  e myself. Wherefzzzzzzhzzfzzz
+zzz GzzzzzzzzzzzzzzzzzzzzzzzzzzzzzHzzzzzzf
+zzzzzz$zz!z$zzzzzzzzzzzzzzzzzzzzztzzzzzzzzz
+
+Step 9700/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  mean to shrink 
+  gen:   mean to shrink zzzzz3zzzzzzzBzzz  zzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzz&zzzzzzzzzzpzzzzzzzzzzzzzDzzzzzz
+z!zzzzzzzzz
+
+Step 9750/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: you do fight in 
+  gen:  you do fight in zzzzzzozz$zzzYzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzdzzzUzzzzzzzzzzFzzz$zzzzzzzzzzzzzz
+zzzzzzzbz
+zzzzzzz
+
+Step 9800/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: y battle shall b
+  gen:  y battle shall bzzzzzzzzzzzzzz
+zzKGzzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzz zzzzzzzzz'zzzzz,zzzzzzzzzzzzzzzzzzz
+zyIzzzzzzz
+
+Step 9850/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: praised, victori
+  gen:  praised, victori'zzzzzhzzzzzzzzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzzzzzzzzzz
+zzzz;zzzzzzzzzzzz.zzbz'zzz
+zzzzzzz 
+
+Step 9900/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: gland weep in st
+  gen:  gland weep in stzzzzzzfzzjzzzTzzzK!zzzzzzzzzzzzzzzzzzzzzzzzzzzz!Izzz;z$Gzzzzzzzzdzzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 9950/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: E:
+First, heaven
+  gen:  E:
+First, heavenzzzzzzzzz-zzzGzzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzOzzzzz!Vzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzzzzzzzzzzz
+
+Step 10000/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: fend my loyalty,
+  gen:  fend my loyalty,zzzzzzgzz,zzzFzzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzdzz,zzzzzzU
+zzzzzzzzzz!zzzzzzzzzzzzzzzz
+zzzzz Lzzzzzzzz
+
+Step 10050/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: traitor coward,
+  gen:  traitor coward,
+zzzzzzhzz-zzz
+zzz $zzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzzz'zzzzzzC.zz zzzzzzzzzzzzzzzzSz$zzzzz
+zzzzzzz
+
+Step 10100/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  vex my grieved 
+  gen:   vex my grieved zzzzzzzzzzzzz
+Nzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzQzzu
+zzzzzzzzzzzz
+zzzzzzzzzzzzzzzzzzz
+zzzzzzzzzz
+
+Step 10150/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  II:
+Rage must b
+  gen:   II:
+Rage must bzzzzz?zzzfzzz
+zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzz$zzzzzzzzzzzzzz zzzzzzzzzzzzzzzzz.zz-z
+tzzzzzz
+
+Step 10200/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ut since correct
+  gen:  ut since correctzzzzzzzzzdzzzWzzzzFzzzzzzzzzzzzzzzzzzzzzzzzzzzgzIzzzzAzzzzzzzzzz
+zzM3zzzzzzzzzzzzAzzzzzzj,z
+zzzzzzz 
+
+Step 10250/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: Hath caused his 
+  gen:  Hath caused his zzzzzM
+zzazzzTzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzz  zz'zzzzzz
+yzzLzzzzzzzzzzzzzzzzz
+Tzz;
+z&zzzzzzz
+
+Step 10300/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: Lord Marshal:
+My
+  gen:  Lord Marshal:
+MyzzzzzzzzzUzzznzzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzz
+zzizzzzzzIzzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 10350/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ROKE:
+Harry of H
+  gen:  ROKE:
+Harry of Hzzzzzzzzzzzzzzzzz !zzzzzzzzzzzzzzzzzzzzzzzzzzzzz!Zzzzzzz!zzzzzzzzzDpz$zzzzzzzzzzzzzzzzzzDzzzzzzzzzzz
+
+Step 10400/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  a twofold vigou
+  gen:   a twofold vigouzzzzzzhzztzzz,zzz  zzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzzzzzzzzzz'&zzmzzzzzzzzzzzzzz
+zzz zzzzzzzzzzzzz
+
+Step 10450/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ant,
+To prove th
+  gen:  ant,
+To prove thzzzzzzgzzzzzz?zzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz:zzzzzzzzzzzzzzIzzzzzzzzzzzzzzzzzzzzzzzGzSzzWzzzezzz
+
+Step 10500/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  the stranger pa
+  gen:   the stranger pazzzzz&zzzzzzzz3zzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzCzzzz
+zzzzzzzzzIzzzzz
+zzzzzzzzzzzzzzzzzzzzzzxzzzzzzz
+
+Step 10550/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: oyal sword your 
+  gen:  oyal sword your zzzzzzfzzzzzzrzzzzFzzzzzzzzzzzzzzzzzzzzzzzzzzzBz,zzzzz Nzzzzzzzzzzzn3zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz 
+
+Step 10600/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  of kings.
+
+JOHN
+  gen:   of kings.
+
+JOHNzzzzz&zzz-zzzzzzzM$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzJzzzzzzDzzzzzzzOzzzv zzzzzzzzzzzzz
+bzzzzzztzzzzzzzzz
+
+Step 10650/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: rom where you do
+  gen:  rom where you dozzzzzzfzz-zzzTzzzN!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzJzzzUz dzzzzzzzzdzz& zzzzzzzzzzzzzzRzz
+zzzzzzzzzzzzz
+
+Step 10700/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  thee; or suppos
+  gen:   thee; or supposzzzzzzgzzpzzz.zzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzBsOzzzUzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzDzzzz
+
+Step 10750/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: e our hollow par
+  gen:  e our hollow parzzzzz.zzz$zzzBzzzN$zzzzzzzzzzzzzzzzzzzzzzzzzzz$z zzzzzczzzzzzzzzWzz&zzzzzzzzzzzzzzzzNzzgzzz
+zzzzzzzz
+
+Step 10800/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: omewhat light,
+W
+  gen:  omewhat light,
+WzzzzzzzzzqzzzTzzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz:zzzzzzSjzzzzzzzzzz&3zzzzzzzzzzzzzzzzzz
+zzz
+zzzzzzz
+
+Step 10850/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  hear,
+My death'
+  gen:   hear,
+My death'zzzzzzzzzqzzzWzzzM!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzz!
+zzzzzzzzzzz zzzzzzzzzzzzzlzzzzzzzzzzzzzzzzz
+
+Step 10900/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: breed and famous
+  gen:  breed and famouszzzzzz
+zzqzzzzzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz!zzzzzzzzzzzzzz!zzYzzzzzzzzzzzzzzzzzzz.zzzzzzzzzzzzz
+
+Step 10950/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  in me,
+I mock m
+  gen:   in me,
+I mock mzzzzzkhzzzzzzzLzz Dzzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzzzfzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzz;
+zzzzzzzz
+
+Step 11000/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: at Edward's son,
+  gen:  at Edward's son,zzzzzzozzqzzzjzzzzDzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzUzzzzzzzMzzzzzzzzzzzzzzzzzz'zzzzz-z
+'zzzzzz.
+
+Step 11050/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: grimage must be.
+  gen:  grimage must be.zzzzzzhzz,zzzUzzzzDzzzzzzzzzzzzzzzzzzzzzzzzzzzzzCzzzzzzzbzzzzzzzdzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 11100/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: of banish'd Here
+  gen:  of banish'd HerezzzzzzfzzlzzzkzzzzFzzzzzzzzzzzzzzzzzzzzzzzzzzzzzDzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+'zzzzzz
+
+Step 11150/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: in revenue.
+
+NOR
+  gen:  in revenue.
+
+NORzzzzzzozzqzzzTzzzzDzzzzzzzzzzzzzzzzzzzzzzzzzzzz!Jzzzzzzkdzzzzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzuzzzzzzzzz
+
+Step 11200/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: angeth over him.
+  gen:  angeth over him.zzzzzzhzz!zzzTzzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzczzzzzzzzTzzzzPzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzz
+
+Step 11250/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: 'd crown,
+Wipe o
+  gen:  'd crown,
+Wipe ozAzzzz
+zz$zzzWzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzHzzzzzzz
+zzzzzz;zzzzzzzzzzzzzzzzzzz, -zzzzu$zzzzzzzz
+
+Step 11300/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: es me it is othe
+  gen:  es me it is othezzzzz,zzzzzzzWzzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzlzJzzzUz3
+zzzzzzzzjzzzzzzzzzzzzzzzzzzYzz'zzzzzzzzzzzzz
+
+Step 11350/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: th my soul broug
+  gen:  th my soul brougzzzzz'
+zzqzzz!zzzN zzzzzzzzzzzzzzzzzzzzzzzzzzzzzdzzzzzzfzzzzzzzLzzzzzzzzzzzzzzzzzzzzzz'zzzuzzzzzzzzz
+
+Step 11400/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ce!
+I know not w
+  gen:  ce!
+I know not wzzzzz-hzzezzzozzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzGezzzzzzzzzzzzzzz
+zzzzzzzzzzzzzzzzzzz
+z:zzzz
+'zzzzzzz
+
+Step 11450/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ittle office
+The
+  gen:  ittle office
+Thezzzzzzzzz,zzzTzzzzDzzzzzzzzzzzzzzzzzzzzzzzzzzzzz,$zzzzzzzzzzzzz$wzzzzzzzzzzzzzzzzzzVzzszzzMz
+zzzJzzz
+
+Step 11500/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ght, my lord, to
+  gen:  ght, my lord, tozzzzzzhzzzzzzz
+zzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzezzzzAzzzzzzzzzzjzzpzAzzzzzzzzzzzzzzzzzzz,zzzzzzzzz,
+
+Step 11550/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: and noble estima
+  gen:  and noble estimazzzzzzfzzTzzznzzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzCzzzzzzzzzzzzzzzzzznzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzzzz
+
+Step 11600/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: e.
+Why have thos
+  gen:  e.
+Why have thoszzzzzzfzzrzzzzzzzzEzzzzzzzzzzzzzzzzzzzzzzzzzzzzzOzzzzzzmzzzzzzz!zzz.zzzzzzzzzzzzzzzzzzzzzzuzzzzzzzzz
+
+Step 11650/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: , and he been th
+  gen:  , and he been thzzzzzzzzzdzzzmzzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzz!zzzzzzzzzzzzzz!
+zDzzzzzzzzzzzzzzzzzzzzzzzzzIzzzzzzz
+
+Step 11700/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: NGBROKE:
+An offe
+  gen:  NGBROKE:
+An offezzzzzzozzTzzzvzzzM$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzezzzUz?FzzzzzzzzMzzzzzzzzzzzzzzzzz
+zzzzzzzzzzzzzzzzz
+
+Step 11750/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  men.
+Bushy and 
+  gen:   men.
+Bushy and zzzzz,zzzlzzz$zzzM zzzzzzzzzzzzzzzzzzzzzzzzzzzzz  zzzzzzzzzzzzzzdzzzzzzzzzzzzzzzzzzdzzzzzzL
+zzzzzzzX
+
+Step 11800/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: reated:
+Tell her
+  gen:  reated:
+Tell herzzzzzzhzzkzzzkzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz$zzWzzzzzzzjzzzzzzzzzzzzzzzzzzWzzzzz!z
+zzzzzzz
+
+Step 11850/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  to keep you kin
+  gen:   to keep you kinzzzzzzzzzlzzzlzzzzDzzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzNzzPzzzzzzzzzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 11900/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: your power?
+
+EAR
+  gen:  your power?
+
+EARzzzzzzhzzrzzz
+zzzNDzzzzzzzzzzzzzzzzzzzzzzzzzzzzbOzzzUzzzEzzzzzzB-zzzzzzzzzzzzzzzzzDzJzzzzzzz!zzzfzzz
+
+Step 11950/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: roke to be as gr
+  gen:  roke to be as grzzzzzzhzz$zzzzzzzMHzzzzzzzzzzzzzzzzzzzzzzzzzzzzCIzzz'z3zzzzzzzzzjzzz3zzzzzzzzzzzzzzzzz'zzzzzzzzzzzzA
+
+Step 12000/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  heart!
+Three Ju
+  gen:   heart!
+Three Juzzzzzzgzzzzzz$zzz $zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zJzzzzzzzzzzzzFzzznzzzzzzzzzzzzzzzzzzzzzzzmzzzzJzzz
+
+Step 12050/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: nd kill with loo
+  gen:  nd kill with loozzzzzzzzzzzzzzzzzMDzzzzzzzzzzzzzzzzzzzzzzzzzzz.zOzzzzJzzezzzzzzzdzzf ,zzzzzzzzzzzzz&zzzzz3z
+Gzzzzzz,
+
+Step 12100/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: And all your nor
+  gen:  And all your norzzzzz.z
+zjzzzTzzz GzzzzzzzzzzzzzzzzzzzzzzzzzzzzzJz
+
+
+zzzzzzzzzz';zzzzzzzzzzzzzzzzzzzzzzzzzzzNzzzzzzz
+
+Step 12150/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: Take not, good c
+  gen:  Take not, good czzzzz&hzzzzzzzNzz $zzzzzzzzzzzzzzzzzzzzzzzzzzzBz&zzzzzzzzzzzzzz!,z:z3Azzzzzzzzzzzzzzzz!zzzzzzzzzzzzz
+
+Step 12200/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: tter'd battlemen
+  gen:  tter'd battlemenzzzzz&zzzzzzzvzzz!!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz:z?zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz!Dzzzzzzzz
+
+Step 12250/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: assal hands agai
+  gen:  assal hands agai3zzzzzzzzozzzTzzz!HzzzzzzzzzzzzzzzzzzzzzzzzzzzzzJzzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzz
+
+Step 12300/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ntle hearing kin
+  gen:  ntle hearing kinzzzzzzzzz.zzz&zzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzzz
+zzzzzzzzzz
+ zzzzzzzzzzzzzzz zzzzzz
+zzzzzzzz
+
+Step 12350/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: sed tears;
+Our s
+  gen:  sed tears;
+Our szzzzz
+zzz
+zzz zzz Dzzzzzzzzzzzzzzzzzzzzzzzzzzzzz3zzz:Izz
+zzzzzz'zzH
+zzzzzzzzzzzzzzzzzzzzzAzz
+zzzzzzz
+
+Step 12400/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: gracious lord, I
+  gen:  gracious lord, Izzzzz?zzz3zzz
+
+zzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzzHzzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzz3zzzzzzz zzzzzzzzz
+
+Step 12450/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: would it do you 
+  gen:  would it do you zzzzzzzzz$zzz zzzzIzzzzzzzzzzzzzzzzzzzzzzzzzzzzzOzzzzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzGzzzzzzTzzzzzzzzz
+
+Step 12500/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: we this garden! 
+  gen:  we this garden! zzzzzz
+zzzzzz
+zzzN zzzzzzzzzzzzzzzzzzzzzzzzzzzBzDzzzzIzz
+zzzzzzzzzz!3zzzzzzzzzzzzzzzzz'zzzzz
+zzzzzzz
+
+Step 12550/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: Nimble mischance
+  gen:  Nimble mischancezzzzzzfzzzzzz
+
+zzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzIzzz;z$
+zzzzzzzz
+zzIz
+zzzzzzzzzzzzzzzz?zzzzzzzzzzzz,
+
+Step 12600/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: at answer shall 
+  gen:  at answer shall zzzzzzz'zqzzzzzzzN$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzCzzzztzzzzzzzzzzzzzz$zzzzzzzzzzzzz
+zzzzz;zz
+zzzzzzz
+
+Step 12650/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: pur thee on with
+  gen:  pur thee on withzzzzzzzzz
+zzz,zzzzIzzzzzzzzzzzzzzzzzzzzzzzzzzzzz,z:zzHzzrzzzzzzz!zzz3zzzzzzzzzzzzzzzzzzzz-z
+bzzzzzz
+
+Step 12700/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: 'd: repeal'd he 
+  gen:  'd: repeal'd he zzzzzzzzz?zzzUzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzHzzzUzzz zzzzzz$zzzRzzzzzzzzzzzzzzzzzzzzzz&lzzzzzzzz
+
+Step 12750/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: t Richard's subj
+  gen:  t Richard's subjzzzzzDzzzzzzz!zzz!Fzzzzzzzzzzzzzzzzzzzzzzzzzzzzz:zzzzz!zzzzzzzzzTzzzz zzzzzzzzzzzzzzzzvzzzzzzzzzzzzz
+
+Step 12800/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: 
+Lords, you that
+  gen:  
+Lords, you thatzzzzzzfzzzzzzzzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zCzzzMzzzzzzzz,
+zzzzzzzzzzzzzzzzzzz
+zzzzzzz-zzzzzzz
+
+Step 12850/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  BOLINGBROKE:
+Pa
+  gen:   BOLINGBROKE:
+Pazzzzzzzzz$zzzz,zzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzOzzzVzzzQzzzzzzzzznzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzzzz
+
+Step 12900/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ut
+My weaved-up 
+  gen:  ut
+My weaved-up zzzzzzhzzzzzz!zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzJzzzU3zz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzJzzzz
+
+Step 12950/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: how me what a fa
+  gen:  how me what a fazzzzzzhzzzzzz!zzzzDzzzzzzzzzzzzzzzzzzzzzzzzzzzzz'zzzz$zzzzzzzzzzWzzzzzzzzzzzzzzzzzzzzzzzz
+z  zzzzzzz
+
+Step 13000/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ot only givest
+M
+  gen:  ot only givest
+Mzzzzz&zzzrzzzjzzz $zzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzzzHzzzzzzzzzz
+3zzzzzzzzzzzzzzzzzzzKzzzzzzDzzzz
+
+Step 13050/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: To whose flint b
+  gen:  To whose flint bzzzzzzozz$zzz!zzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzwJzzz
+ z:ozzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zQzzzMzzzz
+
+Step 13100/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: hat even here th
+  gen:  hat even here thzzzzzzhzzozzz!zzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzzJ:zzzzzzzzzzzzzzjzzz3zzzzzzzzzzzzzz
+zzzCzzY
+Yzzzzzzz
+
+Step 13150/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: t me unkiss the 
+  gen:  t me unkiss the zzzzzzhzzlzzzVzzz Ezzzzzzzzzzzzzzzzzzzzzzzzzzzzz:?zzzzzz!zzzzzzzzzzzzzzzzzzzzzzzzzFzzzzzzzzzzzzzzzzz
+
+Step 13200/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: 
+DUCHESS OF YORK
+  gen:  
+DUCHESS OF YORKzzzzzzhzz&zzzzzzzz'zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzEzzzzzzzz'zzzz
+zzzzzzzzzzzzzgzzz
+zzzzzMzzzzzzz
+
+Step 13250/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: To Bolingbroke a
+  gen:  To Bolingbroke azzzzzWzzz3zzzz
+zzMHzzzzzzzzzzzzzzzzzzzzzzzzzzzzzCzvzzzzzzzzzzzzz
+zzzzTzzzzzzzzzzzz zzzzzzzzzzzzzzzzz
+
+Step 13300/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: h you, pardon me
+  gen:  h you, pardon mezzzzzzfzzazzzz.zz Dzzzzzzzzzzzzzzzzzzzzzzzzzzzzz&zzzzzzzzzzzzzzCzzzzzzzzzzzzzzzzzzgzzz zzzzzzzzzczzz
+
+Step 13350/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: 
+DUCHESS OF YORK
+  gen:  
+DUCHESS OF YORKzzzzzzhzzzzzzzzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzHUzzzzzFzzzzzzzzjzzzz
+zzzzzzzzzzzzzz-zz'zz&
+CzzzzzzA
+
+Step 13400/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: perate; yet thro
+  gen:  perate; yet throzzzzzF
+zz3zzzTzzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzzCz$zzzzzyzzzzzzzzzzz3zzzzzzzzzzzzzzzdzzzzz!zzzzzzzzz
+
+Step 13450/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ent that will st
+  gen:  ent that will stzzzzzzhzzkzzzzzzzK'zzzzzzzzzzzzzzzzzzzzzzzzzzzz&Hzzzzzzz
+zzzzzzzzzzz zzzzzzzzzzzzzzzzzWzzzuzzzzzzzzz
+
+Step 13500/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: NRY BOLINGBROKE:
+  gen:  NRY BOLINGBROKE:zzzzzzfzzkzzzUzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzz$,Oz
+zz zzzzzzzzzzMzzz$zzzzzzzzzzzzzgzzzzzz,z
+
+zzzzzzz
+
+Step 13550/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ping French we d
+  gen:  ping French we dzzzzzzhzzpzzzUzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz ozzzzzzzzzzzzzzzzzTzzzzzzzzzzzzzzzzzzz&zzz
+Ezzzzzz
+
+Step 13600/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: fret. Come, let'
+  gen:  fret. Come, let'zzzzzz
+zz3zzzBzzz !zzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+ zzzzzzUzzzzzzzzzYzzzzzzzzzzzzzzzzzzz'
+zzzIzzzzzzzz
+
+Step 13650/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  that I am unkin
+  gen:   that I am unkinzzzzzzzzzpzzz&zzz Dzzzzzzzzzzzzzzzzzzzzzzzzzzz
+z z:zzzAzzzzzzzzzTzzzzzzzzzzzzzzzzzzzzzzzBzzz-zzzzzzz
+
+Step 13700/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  king,
+When thou
+  gen:   king,
+When thouzzzzzzzzzTzzzzzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzCzzzzzzzzzzzzzzC-zz!zzzzzzzzzzzzzzzzzzzzzzzHzzzzzzzz
+
+Step 13750/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: nd yields thy de
+  gen:  nd yields thy dezzzzzzzzz&zzz
+!zzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzz&zzzzzzzzzzzzzzzTzzkz
+zzzzzzzzzzzzzzzzzzz3z
+zzzzzzz
+
+Step 13800/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  here is Carlisl
+  gen:   here is Carlislzzzzzzgzzjzzz-zzzM
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzz'zzzzzzz
+zzzzzzzzzzz zzzzzzzzzzzzzzzzzzzzzz!zzzzzzzz
+
+Step 13850/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ollar.
+
+SAMPSON:
+  gen:  ollar.
+
+SAMPSON:zzzzzzzzzrzzz!zzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzz!fzzzzzzUzzzzzzzezzzzzzzzzzzzzzzzzzzzzzzDzz
+zzzzzzz
+
+Step 13900/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  is a disgrace t
+  gen:   is a disgrace tzzzzzzhzz zzzVzzzzIzzzzzzzzzzzzzzzzzzzzzzzzzzzzz:zzzzzzQ
+zzzzzzzzzzz3zzzzzzzzzzzzzzzzz
+zzzzzzzzzzzzz
+
+Step 13950/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  quench the fire
+  gen:   quench the firezzzzzzozzlzzz!zzz $zzzzzzzzzzzzzzzzzzzzzzzzzzzzzOzzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzZzzzzzzzzz
+
+Step 14000/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: led mind drave m
+  gen:  led mind drave mzzzzzzozzzzzz;zzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz:zzzzzzzzzzzzzzzjzz
+zzzzzzzzzzzzzzzzz z.z$z
+
+zzzzzzz
+
+Step 14050/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: TAGUE:
+I would t
+  gen:  TAGUE:
+I would tzzzzzzzzzjzzzAzzzM zzzzzzzzzzzzzzzzzzzzzzzzzzz&z zzzzzzzmzzzzzzzdzz
+$zzzzzzzzzzzzzzzL,zzzzD
+
+zzzzzz
+
+Step 14100/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: vers' tears:
+Wha
+  gen:  vers' tears:
+Whazzzzzzzzzmzzz
+zzzN'zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zuzzzMz.zzzzzz
+!zz
+zzzzzzzzzzzzz zzzzzzzzz3
+zzzzzzz
+
+Step 14150/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: berty unto thine
+  gen:  berty unto thinezzzzz;gzzzzzz!zzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzCzzzzzzzzzzzzzzzdzzD !zzzzzzzzzzzzzzzz$zzvzz
+zzzzzz
+
+Step 14200/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ark heaven light
+  gen:  ark heaven lightzzzzzzhzz$zzzTWzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzJzzzzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzz
+zzzzzzzzz
+
+Step 14250/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  you have learne
+  gen:   you have learnezzzzzzfzz,zzz?zzzM!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzzu
+zzzzzzzzzz!zzzzzzzzzzzzzzzz!zz$zzz zzzzzzzz
+
+Step 14300/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: et there be weig
+  gen:  et there be weigzzzzzzzzz zzz zzzN!zzzzzzzzzzzzzzzzzzzzzzzzzzzz
+Hzzzzzzz
+zzzzzz?zzz! zzzzzzzzzzzzzzzzzzzzzt
+zzzzzzzz
+
+Step 14350/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: , I do bear a br
+  gen:  , I do bear a brzzzzzzzzzkzzz
+zzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz:zzzzzzRzzzzzzzz
+zz
+zzzzzzzzzzzzzzzzzzz zzz
+zzzzzzz
+
+Step 14400/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: daughter Juliet,
+  gen:  daughter Juliet,zzzzzzzzzqzzz'zzzM!zzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzzz&zzzzzz'&zz
+3zzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzz
+
+Step 14450/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ake it fly.
+
+Ser
+  gen:  ake it fly.
+
+Serzzzzz&zzzfzzz
+
+zzNIzzzzzzzzzzzzzzzzzzzzzzzzzzzzzD.zzzHzzzzzzzzzzdzzKz
+zzzzzzzzzzzzzz$zzhz$z
+
+zzzzzz
+
+Step 14500/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: .
+Give me a case
+  gen:  .
+Give me a casezzzzzzzzzzzzz
+zzzzEzzzzzzzzzzzzzzzzzzzzzzzzzzzz'Jzzzz zzezzzzzzzjzzzzzzzzzzzzzzzzzzdzzzzj,z
+zzzzzzzz
+
+Step 14550/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  the lash of fil
+  gen:   the lash of filzzzzzzzzznzzz
+zzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzJzzzUzzzzzzzzzzIxzzzzzzzzzzzzzzzzz&zzzzzzz&
+$zzzzzzz
+
+Step 14600/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: s thin of substa
+  gen:  s thin of substazzzzzzzzzUzzz
+$zzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz'zzzzzzzzzzzzzzzTzzzzHzzzzzzzzzzzzzzzzzzz3z
+zzzzzzz
+
+Step 14650/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ow?
+Welcome, gen
+  gen:  ow?
+Welcome, genzzzzzz
+zzqzzzjzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzzzzzzzzzzIyzzzzzzzzzzzzzzzzzzzzzzzzzz$,zzzzzzz
+
+Step 14700/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ow, by the stock
+  gen:  ow, by the stockzzzzzzhzzzzzzzzzz  zzzzzzzzzzzzzzzzzzzzzzzzzzzzz&zzz$zzzzzzzzzzzdzzM3Czzzzzzzzzzzzzzzz$zzzzzzzzzzzzz
+
+Step 14750/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ood pilgrim, you
+  gen:  ood pilgrim, youzzzzz?zzzjzzzmzzzzHzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzzzzzzdzzz3zzzzzzzzzzzzzzBCzzzz3zzzzzzzzz
+
+Step 14800/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ?
+
+Nurse:
+Marry,
+  gen:  ?
+
+Nurse:
+Marry,zzzzzzzzzozzzWzzz $zzzzzzzzzzzzzzzzzzzzzzzzzzz&GJzzzPzz!$zzzzzzzzzzzzzzzzzzzzzzzzzz zzzzz
+zzzzzMzzzz
+
+Step 14850/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: in the likeness 
+  gen:  in the likeness zzzzzzozzzzzz'zzz GzzzzzzzzzzzzzzzzzzzzzzzzzzzVz zzzzezzzzzzzzz,
+zznzzzzzzzzzzzzzzzzzI!zzzzzzzzzzzzz
+
+Step 14900/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ! what light thr
+  gen:  ! what light thrzzzzzzzzzzzzzzKzzNDzzzzzzzzzzzzzzzzzzzzzzzzzzzzzCzzzzezzzzzzzzz!zzzz3zzzzzzzzzzzzzzzzzzzWzz'-zzzzzzz
+
+Step 14950/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ague? it is nor 
+  gen:  ague? it is nor zzzzzzzzzzzzzzzzzzDzzzzzzzzzzzzzzzzzzzzzzzzzzzgzIzzzVzzzOzzzzzzzzzis3tzzzzzzzzzzzzzzzzzzz
+zzzzzDzzzz
+
+Step 15000/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: from their sight
+  gen:  from their sightzzzzzzzzz3zzz!zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzzzzzzzzzzzzz'yzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 15050/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: circled orb,
+Les
+  gen:  circled orb,
+Leszzzzzzozzzzzz?zzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzJz
+zzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzkzzzzzzWzzzzzzzzz
+
+Step 15100/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: that I'll procur
+  gen:  that I'll procurzzzzzz
+zz&zzz
+zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzOzzzzHzzkzzzzzzIwzz
+
+zzzzzzzzzzzzzzzRzzzzzzA zzzzzzz
+
+Step 15150/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: sted gyves,
+And 
+  gen:  sted gyves,
+And zzzzz-ozzzzzz!
+zz!DzzzzzzzzzzzzzzzzzzzzzzzzzzzlpJzzz;z$zzzzzzzzz
+zzzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 15200/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: hat part cheers 
+  gen:  hat part cheers zzzzzzzzz
+zzz!zzzM!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzIxzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 15250/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: at thou must com
+  gen:  at thou must comzzzzzzozzzzzz?3zzzDzzzzzzzzzzzzzzzzzzzzzzzzzzzzzOzzBVzzAzzzzzzzzzzz,z3zzzzzzzzzzzzzzzzzzz
+zzzzzDzzzz
+
+Step 15300/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ERCUTIO:
+Where t
+  gen:  ERCUTIO:
+Where tzzzzz&zzzlzzz!zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzezzzz
+zzzzzzzzzIwzz.3zzzzzzzzzzzzzzz
+zzzzzzzJzzzzzzz
+
+Step 15350/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ease on the old 
+  gen:  ease on the old zzzzzzgzzzzzz-'zzzDzzzzzzzzzzzzzzzzzzzzzzzzzzzz$Jzzzzzzzzzzzzzz$zzzz$czzzzzzzzzzzzz!zz?zzzszzzzzzzzz
+
+Step 15400/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: se in one of
+thy
+  gen:  se in one of
+thyzzzzzzzzzzzzzrHzzM!zzzzzzzzzzzzzzzzzzzzzzzzzz z!dzzzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzzzzz'zzzz
+
+Step 15450/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: upon the prick o
+  gen:  upon the prick ozzzzzzgzz zzzGzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzuzzzzzzzTzz!3zzzzzzzzzzzzzzzDz'zz
+z
+&zzzzzzK
+
+Step 15500/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: thou must stand 
+  gen:  thou must stand zzzzzz
+zz-zzzUzzzMHzzzzzzzzzzzzzzzzzzzzzzzzzzz zOz
+zzz! zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz!zzzzzzzzz
+
+Step 15550/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  my convoy in th
+  gen:   my convoy in thzzzzzzhzz$zzz&zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzz-
+zzzzzzzzzz!zzzzzzzzzzzzzzzzznzCzZz zzzDzzzz
+
+Step 15600/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: pon the highmost
+  gen:  pon the highmostzzzzz-zzzazzz
+zzzz zzzzzzzzzzzzzzzzzzzzzzzzzzz
+zOzzz:z3
+zzzzzzzz
+zz!zzzzzzzzzzzzzzz,&Gzzzz
+zzzzzzzzz
+
+Step 15650/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: le as a lamb. Go
+  gen:  le as a lamb. Gozzzzzzfzzqzzz:zzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzVzdz,z!zzzzzzzzzzzdzz!zzzzzzzzzzzzzzzzzzzzzzz
+!zzzzzzz
+
+Step 15700/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ile the heavens 
+  gen:  ile the heavens zzzzzzzzz
+zzz'zzz!Dzzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzzz
+zzzzzzzzzz$zzzzzzzzzzzzzz&zszz;zzz
+zzzzzzzz
+
+Step 15750/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: stay alone
+Till 
+  gen:  stay alone
+Till zzzzzzozzqzzz
+zzzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzz z.zzzzzGzzzzzzzzzi!zzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzz
+
+Step 15800/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  hour and a quar
+  gen:   hour and a quarzzzzzzzzzpzzz!zzzzGzzzzzzzzzzzzzzzzzzzzzzzzzzz'zdzzzzz!'zzzzzzzzzzzzzzzzzzzzzzzzzz'zzzzzzz!zzzzzzzzz
+
+Step 15850/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: st, I never inju
+  gen:  st, I never injuzzzzzz
+zzzzzz
+zzz!HzzzzzzzzzzzzzzzzzzzzzzzzzzzzsHzzzzzzz'zzzzzzFxzzEzzzzzzzzzzzzzz
+zGzzzzzzz
+zzzzzzz
+
+Step 15900/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  devil came you 
+  gen:   devil came you zzzzzzzzzzzzzz zzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzzJzzzzzzz'zzzzzzL-zztz
+zzzzzzzzzzzzzzezzzzzzz
+zzzzzzz
+
+Step 15950/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: he?
+
+BENVOLIO:
+T
+  gen:  he?
+
+BENVOLIO:
+Tzzzzzzozz3zzzVzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzezzzzzzzzzzzzzz?zzz&z$zzzzzzzzzzzzzzzzzzzzuzzzzzzzzz
+
+Step 16000/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: eo turn and fly.
+  gen:  eo turn and fly..zzzzzfzzkzzz
+zzzzFzzzzzzzzzzzzzzzzzzzzzzzzzzzz,Oz
+zzzzzzzzzzzzI.zzzzzzzzzzzzzzzzzzV,zzzvzzzRzzzbzzz
+
+Step 16050/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: of stainless mai
+  gen:  of stainless maizzzz
+zhzzzzzz
+zzz !zzzzzzzzzzzzzzzzzzzzzzzzzzzzzJzzz z zzzzzzzzz
+zzzzzzzzzzzzzzzzDz;zz
+zzzzzzzzzzzzz
+
+Step 16100/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: be such an I;
+Or
+  gen:  be such an I;
+Orzzzzz.zzzzzzzFHzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzzdzzz
+z& zzzzzzzz!zz.z
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 16150/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  a gorgeous pala
+  gen:   a gorgeous palazzzzzzzzz-zzzzzzz HzzzzzzzzzzzzzzzzzzzzzzzzzzzzGHzzzzzzfzzzzzzz3zz
+.$zzzzzzzzzzzzzzzzzzzzzs zzzzzzzz
+
+Step 16200/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: entations might 
+  gen:  entations might zzzzzzzzzzzzz!zzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzzz,zzzzzzz,zzzzzz3-zz!zzzzzzzzzzzzzzzzzzzzzzz&zzzzzzzz
+
+Step 16250/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: nishment! be mer
+  gen:  nishment! be merzzzzz3fzz3zzz
+ zzz!zzzzzzzzzzzzzzzzzzzzzzzzzzz$GJzzzzzzzzzzzzzzNzzzTz
+zzzzzzzzzzzzzK!Gzzzzu
+zzzzzzzz
+
+Step 16300/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: how hast thou th
+  gen:  how hast thou thzzzzzzzzzzzzz&zzz Fzzzzzzzzzzzzzzzzzzzzzzzzzzzz&Hzzz;z&
+!zzzzzzzMzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 16350/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: on the ground, w
+  gen:  on the ground, wzzzzzz
+zz?zzzzzzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzzzezzzUzz&zzzzzzzzzznzzzzzzzzzzzzzzzz'zzzzz
+zzzzzDzzzz
+
+Step 16400/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: earth?
+Since bir
+  gen:  earth?
+Since birzzzzzzzzzzzzz'zzzzEzzzzzzzzzzzzzzzzzzzzzzzzzzzzzHzzzyz!zzzzzzzzzzzzzzzzzzzzzzzzzzzAzzzzzzzUzzzz'zzzz
+
+Step 16450/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ;
+And bid her ha
+  gen:  ;
+And bid her hazzzzzzzzzzzzz zzzNIzzzzzzzzzzzzzzzzzzzzzzzzzzzzz zzz zzzzzzzzzzzjzz
+ zzzzzzzzzzzzzzz
+zzzzzz
+$zzzzzz
+
+Step 16500/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: love;
+And bid he
+  gen:  love;
+And bid hezzzzzzhzzzzzz'zzzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzGezzzzzzz&zzzzzzNzzz
+zzzzzzzzzzzzzzzzzz
+zzzt zzzzzzzz
+
+Step 16550/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: be ta'en, let me
+  gen:  be ta'en, let mezzzzzzhzzzzzz
+zzz FzzzzzzzzzzzzzzzzzzzzzzzzzzzzzdzzzzzzzzzzzzzzPzzu zzzzzzzzzzzzzzzzzz'zzzu!zzzzzzzz
+
+Step 16600/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: ill-divining sou
+  gen:  ill-divining souzzzzzzfzzkzzz
+zzz 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzz:zzzzzzz
+zzzzzzzzzz zzzzzzzzzzzzzzzzzz
+zzzz
+zzzzzzzz
+
+Step 16650/50000 (epoch 0): loss = 23.0259 avg = nan
+Unhandled exception: Arithmetic overflow (OverflowError)
+  from src/microgpt/micro_gpt.cr:236:32 in '[]='
+  from src/microgpt/micro_gpt.cr:1587:32 in 'generate'
+  from src/microgpt/main.cr:1184:85 in 'main'
+  from src/microgpt/main.cr:1253:1 in '__crystal_main'
+  from /usr/lib/crystal/crystal/main.cr:129:5 in 'main_user_code'
+  from /usr/lib/crystal/crystal/main.cr:115:7 in 'main'
+  from /usr/lib/crystal/crystal/system/unix/main.cr:9:3 in 'main'
+  from /usr/lib/libc.so.6 in '??'
+  from /usr/lib/libc.so.6 in '__libc_start_main'
+  from bin/microgpt in '_start'
+  from ???

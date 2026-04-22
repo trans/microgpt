@@ -1,0 +1,99 @@
+Loaded checkpoint: /tmp/sat_sat-sgd-s32-50k_r2.model
+MiniGPT ready.
+  Vocab: 65 chars
+  Params: 108481
+  Config: d_model=64 n_layers=2 d_ff=256 seq_len=32 lr=0.003
+  Backend: cublas
+  Model: /tmp/sat_sat-sgd-s32-50k_r2.model
+
+Step 0/50000 (epoch 0): loss = 23.0259 avg = 23.0259
+  seed: First Citizen:
+B
+  gen:  First Citizen:
+B&zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+Step 50/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: till the altitud
+  gen:  till the altitudzzzzzzzzzzzzzzzzzz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzJYzzzzzzz,zzzzzzz&zzzzzzzzzzzzz!TSzzzz'zzzz!
+zzzz
+
+Step 100/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: u, and you sland
+  gen:  u, and you slandzzzzzz
+zzzzzz!Jzzz!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzzzMzzGz
+zzzzzzzzzzzzzzzzIzzzzzzzzzzzjz
+
+Step 150/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  envied his rece
+  gen:   envied his recezzz,zzzzz$zz,uzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz'
+zz$zzzzzzzz!zzzzzzzzzzzzzvz&zzzzzCzzzzzzzz
+
+Step 200/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: up, that all
+Fro
+  gen:  up, that all
+Frozzzzzzz,z
+ Fzzzzz 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzO
+hz
+Lzzzzzzz$zzzzzzzzzzzzz
+zzB:zzzz
+zB
+zzzzz
+
+Step 250/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: 
+A sick man's ap
+  gen:  
+A sick man's apzz
+zzzzzz
+!zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzA.$zwzzzzzzZX$zzz
+zzzzzzzzzzzzzzzzzzzzLizzz!A
+Xzz
+
+Step 300/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: e heart of gener
+  gen:  e heart of generzzzzzzhzzzzzzzzzzzDzzzzzzzzzzzzzzzzzzzzzzzzzzzzz z&z!zzz$zzzzzzzZzzz-zzzzzzzzzzzzzzzzzzzzzzzz'zz$gz$
+
+Step 350/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: MENENIUS:
+O, tru
+  gen:  MENENIUS:
+O, truzzzzzzzzizYz:zzzzKDzzzzzzzzzzzzzzzzzzzzzzzzzzzzczzzzzzPzzzzzzzzzzzzzzzzzzzzzzzzzzzzFzzzzz.-zzzzzzzzz
+
+Step 400/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed:  goes
+Upon this 
+  gen:   goes
+Upon this zzzzzzzNz?zzz!zzzz$zzzzzzzzzzzzzzzzzzzzzzzzzzzz
+zzzzzzzzrzzzzzzzzz
+&zzzzzzzzzzzzzzf$z'zzzzz zzzzzzzz
+
+Step 450/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: between us we sh
+  gen:  between us we shzzzzz&z
+z!zzz
+zzzz zzzzzzzzzzzzzzzzzzzzzzzzzzzAzzzzzzzz&zzzzzzzzWzzzAzzzzzzzzzzzzzzzzz!z
+z
+XTzzzzzz
+
+Step 500/50000 (epoch 0): loss = 23.0259 avg = nan
+  seed: I hear hither yo
+  gen:  I hear hither yozz-zzzz?KzDzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz3zzzzzzzzzz!
+zzz
+zzzzzzzzzzzzzzzzzzzz$zJzzzzz$zz
+
+Step 550/50000 (epoch 0): loss = 23.0259 avg = nan
+Unhandled exception: Arithmetic overflow (OverflowError)
+  from src/microgpt/micro_gpt.cr:236:32 in '[]='
+  from src/microgpt/micro_gpt.cr:1587:32 in 'generate'
+  from src/microgpt/main.cr:1184:85 in 'main'
+  from src/microgpt/main.cr:1253:1 in '__crystal_main'
+  from /usr/lib/crystal/crystal/main.cr:129:5 in 'main_user_code'
+  from /usr/lib/crystal/crystal/main.cr:115:7 in 'main'
+  from /usr/lib/crystal/crystal/system/unix/main.cr:9:3 in 'main'
+  from /usr/lib/libc.so.6 in '??'
+  from /usr/lib/libc.so.6 in '__libc_start_main'
+  from bin/microgpt in '_start'
+  from ???
