@@ -2,7 +2,20 @@
 # AGPT mass-weight mode sweep. Simpler, non-functional script — no set -e,
 # no functions. Easier to debug if something goes wrong.
 
-cd /home/trans/Projects/microgpt
+# The caller's CWD should be the project root. Capture it via PROJECT_ROOT
+# env var (defaults to $PWD at invocation time). Don't rely on $0 or
+# BASH_SOURCE — under some launch mechanisms (Bash-tool background,
+# nohup with an unusual parent state, cron, etc.) CWD may have been
+# reset to / before the script starts, so $0 can resolve wrong.
+PROJECT_ROOT="${PROJECT_ROOT:-$PWD}"
+cd "$PROJECT_ROOT" || { echo "Cannot cd to PROJECT_ROOT=$PROJECT_ROOT"; exit 1; }
+# Sanity check: project root should have the Justfile.
+if [ ! -f Justfile ]; then
+    echo "PROJECT_ROOT=$PROJECT_ROOT doesn't look like the microgpt project root"
+    echo "(no Justfile present). Invoke from the project root, or set"
+    echo "PROJECT_ROOT env var explicitly." >&2
+    exit 1
+fi
 OUT="rnd/sgd-sanity-check/logs"
 RES="rnd/sgd-sanity-check/results"
 mkdir -p "$OUT" "$RES"
