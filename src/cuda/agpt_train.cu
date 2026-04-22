@@ -2685,7 +2685,7 @@ struct TrainPersistence {
 int run_radix_training(const Config& cfg, const WeightOffsets& wo,
                         float* h_weights, RadixTrieData& trie,
                         int epochs, float entropy_lambda, MassWeightMode mass_weight,
-                        int subtree_splits, int partition_depth,
+                        int subtree_splits, int partition_depth, bool accumulate,
                         bool single_subtree, float intermediate_weight,
                         OptimizerKind optimizer, float momentum_beta, float rmsprop_beta,
                         LRSchedule lr_schedule, int warmup_epochs,
@@ -3280,6 +3280,13 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
         int curriculum_d_start = (curriculum == CurriculumMode::Progressive) ? 1 : curriculum_max_depth;
         int curriculum_d_end = curriculum_max_depth;
 
+        // --accumulate mode: zero gradients ONCE at the top of the epoch so
+        // all splits + partition groups + root-children accumulate into the
+        // same buffer. A single optimizer step fires after all loops below.
+        if (accumulate) {
+            CUDA_CHECK(cudaMemset(d_grads, 0, wo.total_floats * sizeof(float)));
+        }
+
         for (int curriculum_d = curriculum_d_start; curriculum_d <= curriculum_d_end; curriculum_d++) {
         // Iterate over root-child subtrees. Each subtree is one training unit:
         // weights fixed throughout forward+backward+grad-aggregation, one Adam step.
@@ -3309,7 +3316,10 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
 
             // AGPT invariant: weights are fixed across all chunks of this sub-batch.
             // Zero gradients once at split start; accumulate across chunks.
-            CUDA_CHECK(cudaMemset(d_grads, 0, wo.total_floats * sizeof(float)));
+            // In --accumulate mode, the zero happens once per-epoch above, not here.
+            if (!accumulate) {
+                CUDA_CHECK(cudaMemset(d_grads, 0, wo.total_floats * sizeof(float)));
+            }
 
             // Chunk by total queries ≤ CHUNK_QUERIES
             int chunk_start = 0;
@@ -3773,6 +3783,9 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
             // all descendant-branch gradients sharing a prefix inside this subtree
             // have been accumulated into d_grads (Jacobian factorization realized
             // via additive gradient accumulation).
+            // In --accumulate mode, we skip the per-split/per-rc step and fire one
+            // after all loops exit (see below).
+            if (!accumulate) {
             adam_t++;
             // Apply LR schedule: `adam_t` counts total optimizer steps taken so
             // far (monotonically across epochs). We need total_steps to compute
@@ -3831,11 +3844,59 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
                 cuda_weight_decay(d_weights, step_lr, weight_decay, wo.total_floats);
             }
             subtrees_trained++;
+            }  // end !accumulate gate
 
             subtree_offset += split_size;
         }  // end subtree-splits loop
         }  // end root-child subtree loop
         }  // end curriculum loop
+
+        // --accumulate: single optimizer step at the end of the epoch, after all
+        // splits, partition groups, and root-children have contributed to d_grads.
+        if (accumulate) {
+            adam_t++;
+            int total_opt_steps_estimate;
+            if (persist && persist->total_opt_steps_override > 0) {
+                total_opt_steps_estimate = persist->total_opt_steps_override;
+            } else {
+                total_opt_steps_estimate = epochs;
+                if (total_opt_steps_estimate < 1) total_opt_steps_estimate = 1;
+            }
+            int warmup_steps_acc;
+            if (persist && persist->warmup_steps_override > 0) {
+                warmup_steps_acc = persist->warmup_steps_override;
+            } else {
+                warmup_steps_acc = warmup_epochs;
+            }
+            float step_lr = compute_lr(cfg.lr, adam_t - 1, total_opt_steps_estimate,
+                                       warmup_steps_acc, lr_schedule);
+            if (grad_clip_norm > 0.0f) {
+                cuda_grad_clip_by_norm(d_grads, grad_clip_norm, wo.total_floats,
+                                        d_clip_partials, d_clip_norm);
+            }
+            switch (optimizer) {
+                case OptimizerKind::Adam:
+                    cuda_adam_bulk(d_weights, d_grads, d_adam_m, d_adam_v,
+                                    step_lr, momentum_beta, rmsprop_beta, 1e-8f,
+                                    adam_t, wo.total_floats);
+                    break;
+                case OptimizerKind::SGD:
+                    cuda_sgd_bulk(d_weights, d_grads, step_lr, wo.total_floats);
+                    break;
+                case OptimizerKind::Momentum:
+                    cuda_momentum_bulk(d_weights, d_grads, d_adam_m,
+                                       step_lr, momentum_beta, wo.total_floats);
+                    break;
+                case OptimizerKind::RMSProp:
+                    cuda_rmsprop_bulk(d_weights, d_grads, d_adam_v,
+                                      step_lr, rmsprop_beta, 1e-8f, wo.total_floats);
+                    break;
+            }
+            if (weight_decay > 0.0f) {
+                cuda_weight_decay(d_weights, step_lr, weight_decay, wo.total_floats);
+            }
+            subtrees_trained++;
+        }
 
         clock_gettime(CLOCK_MONOTONIC, &t1);
         double elapsed = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9;
@@ -3929,7 +3990,7 @@ int run_per_subtree_training(const Config& cfg_in, const WeightOffsets& wo,
                               float* h_weights,
                               const SubtreeManifest& manifest,
                               int super_epochs, float entropy_lambda, MassWeightMode mass_weight,
-                              int subtree_splits, int partition_depth,
+                              int subtree_splits, int partition_depth, bool accumulate,
                               bool single_subtree, float intermediate_weight,
                               OptimizerKind optimizer, float momentum_beta, float rmsprop_beta,
                               LRSchedule lr_schedule, int warmup_super_epochs,
@@ -4033,7 +4094,7 @@ int run_per_subtree_training(const Config& cfg_in, const WeightOffsets& wo,
             // One subtree, one Adam/RMSProp step (single_subtree semantics per file).
             // Save path is deferred to the super-epoch level below.
             run_radix_training(cfg, wo, h_weights, view.t,
-                               /*epochs=*/1, entropy_lambda, mass_weight, subtree_splits, partition_depth,
+                               /*epochs=*/1, entropy_lambda, mass_weight, subtree_splits, partition_depth, accumulate,
                                /*single_subtree=*/true, intermediate_weight,
                                optimizer, momentum_beta, rmsprop_beta,
                                lr_schedule, warmup_super_epochs,
@@ -4083,8 +4144,13 @@ int main(int argc, char** argv) {
     float lr = 3e-4f;
     float entropy_lambda = 0.0f;
     MassWeightMode mass_weight = MassWeightMode::Off;
-    int subtree_splits = 1;   // 1 = one Adam step per root-child subtree (invariant)
+    int subtree_splits = 1;   // deprecated: count-based chunking. --partition-depth is preferred.
     int partition_depth = 1;  // 1 = per-root-child (65 groups); 2 = bigram (~1139); 3 = trigram; etc.
+    // Default: accumulate gradients across all splits + partitions within a
+    // training-unit call; fire ONE optimizer step at the end. Preserves the
+    // AGPT invariant and avoids K/V staleness that comes from firing the
+    // optimizer mid-subtree. Override with --no-accumulate for the old behavior.
+    bool accumulate = true;
     int chunk_queries  = 0;   // 0 → default 50000 inside trainer
     bool single_subtree = false;  // treat entire trie as one subtree (1 Adam/epoch)
     float intermediate_weight = 1.0f;  // loss scale at unary-intermediate positions; 1.0 = unchanged
@@ -4127,6 +4193,8 @@ int main(int argc, char** argv) {
         }
         else if (strcmp(argv[i], "--subtree-splits") == 0 && i + 1 < argc) subtree_splits = atoi(argv[++i]);
         else if (strcmp(argv[i], "--partition-depth") == 0 && i + 1 < argc) partition_depth = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--accumulate") == 0) accumulate = true;         // default; no-op, kept for explicitness
+        else if (strcmp(argv[i], "--no-accumulate") == 0) accumulate = false;     // opt in to legacy fire-per-group behavior
         else if (strcmp(argv[i], "--chunk-queries") == 0 && i + 1 < argc) chunk_queries = atoi(argv[++i]);
         else if (strcmp(argv[i], "--single-subtree") == 0) single_subtree = true;
         else if (strcmp(argv[i], "--lr-scale-by-steps") == 0) lr_scale_by_steps = true;
@@ -4174,15 +4242,20 @@ int main(int argc, char** argv) {
                         "                                weighting — common patterns dominate).\n"
                         "                                off = equal weight per radix endpoint.\n"
                         "  [--curriculum flat|progressive]\n"
-                        "  [--subtree-splits N]        — split subtree into N sub-batches, N\n"
-                        "                                Adam steps per subtree (1 = strict invariant;\n"
-                        "                                >1 reintroduces within-subtree K/V staleness).\n"
+                        "  [--subtree-splits N]        — DEPRECATED count-based chunking. Use\n"
+                        "                                --partition-depth instead. With --accumulate\n"
+                        "                                (default) it's harmless work-division.\n"
                         "  [--partition-depth N]       — n-gram partition: group radix nodes by their\n"
-                        "                                depth-N ancestor, one Adam step per group.\n"
-                        "                                1 (default) = per-root-child (65 groups).\n"
+                        "                                depth-N ancestor. Pure work-division by default.\n"
+                        "                                1 = per-root-child (65 groups at vocab=65).\n"
                         "                                2 = per-bigram (~1139 groups at d=16 Shakespeare).\n"
-                        "                                3 = per-trigram; etc. More groups = more Adam\n"
-                        "                                steps per super-epoch; smaller effective batch.\n"
+                        "                                3 = per-trigram; etc.\n"
+                        "  [--accumulate]              — default ON. Accumulate gradients across all\n"
+                        "                                splits and partition groups within a training\n"
+                        "                                unit; fire ONE optimizer step at the end.\n"
+                        "  [--no-accumulate]           — opt in to legacy per-group optimizer firing\n"
+                        "                                (reintroduces K/V staleness; for reproducing old\n"
+                        "                                experiments only).\n"
                         "  [--chunk-queries N]         — GPU-memory chunk size (default 50000). No effect on\n"
                         "                                gradient semantics: chunks within a split accumulate.\n"
                         "  [--single-subtree]          — merge all root-child subtrees into one → 1 Adam/epoch\n"
@@ -4228,7 +4301,7 @@ int main(int argc, char** argv) {
 
         int rc = run_per_subtree_training(cfg, wo, h_weights, manifest,
                                            /*super_epochs=*/epochs,
-                                           entropy_lambda, mass_weight, subtree_splits, partition_depth,
+                                           entropy_lambda, mass_weight, subtree_splits, partition_depth, accumulate,
                                            single_subtree, intermediate_weight,
                                            optimizer, momentum_beta, rmsprop_beta,
                                            lr_schedule, warmup_epochs,
@@ -4242,7 +4315,7 @@ int main(int argc, char** argv) {
         printf("Loading radix trie from %s...\n", trie_dir);
         RadixTrieData radix_trie = load_radix_trie(trie_dir);
 
-        return run_radix_training(cfg, wo, h_weights, radix_trie, epochs, entropy_lambda, mass_weight, subtree_splits, partition_depth, single_subtree, intermediate_weight, optimizer, momentum_beta, rmsprop_beta, lr_schedule, warmup_epochs, weight_decay, grad_clip_norm, save_every, curriculum, save_path);
+        return run_radix_training(cfg, wo, h_weights, radix_trie, epochs, entropy_lambda, mass_weight, subtree_splits, partition_depth, accumulate, single_subtree, intermediate_weight, optimizer, momentum_beta, rmsprop_beta, lr_schedule, warmup_epochs, weight_decay, grad_clip_norm, save_every, curriculum, save_path);
     }
 
     // Load leveled trie
