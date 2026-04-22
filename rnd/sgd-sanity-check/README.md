@@ -126,3 +126,24 @@ that's wanted deliberately.
   — otherwise we'd be measuring fine-tuning dynamics, not the training-from-scratch
   behavior we want.
 - **Single-subtree mode**: for AGPT (matches the memory's winning recipe).
+
+## Init checkpoint caveat (discovered 2026-04-21)
+
+`data/input.agpt.model` is **not** a random-init — it is a previously fully
+trained AGPT checkpoint with held-out PPL ≈ 13.74. The mass-weight sweep
+above was therefore measuring *fine-tuning deltas* from near-optimal, not
+training dynamics from scratch. This is fine for comparing weighting modes
+(they all start equal), but it meant the SGD side of the comparison
+diverges to NaN on the first step because per-sample gradients from an
+already-sharp softmax blow up.
+
+For a proper from-scratch comparison, use `data/input.random.model`
+(built fresh, PPL ≈ 166):
+
+```
+bin/microgpt --file data/input.txt --model data/input.random.model \
+  --steps 1 --lr 0 --seed 42 --d-model 64 --n-layers 2 --seq-len 128 \
+  --backend cublas
+```
+
+(One step at lr=0 so microgpt's save path fires without modifying weights.)
