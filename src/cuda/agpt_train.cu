@@ -1753,6 +1753,82 @@ void launch_kv_gather_k_anc_delta_rope(const __nv_bfloat16* global_k,
         packed_k, N, n_heads, head_dim);
 }
 
+// --- Bias gradient: accumulate column-sum of a [rows, cols] gradient tensor ---
+// bias[c] += scale * sum_{r} grad[r, c]. Simple one-block-per-column reduction;
+// rows typically O(T_q) which is small enough that a single block per column is fine.
+__global__ void bias_grad_accum_kernel(const float* grad, int rows, int cols,
+                                        float scale, float* bias) {
+    int c = blockIdx.x;
+    if (c >= cols) return;
+    int tid = threadIdx.x;
+    int nthreads = blockDim.x;
+    extern __shared__ float sdata[];
+    float local = 0.0f;
+    for (int r = tid; r < rows; r += nthreads) local += grad[r * cols + c];
+    sdata[tid] = local;
+    __syncthreads();
+    for (int s = nthreads / 2; s > 0; s >>= 1) {
+        if (tid < s) sdata[tid] += sdata[tid + s];
+        __syncthreads();
+    }
+    if (tid == 0) bias[c] += scale * sdata[0];
+}
+
+void launch_bias_grad_accum(const float* grad, int rows, int cols,
+                             float scale, float* bias) {
+    int threads = 256;
+    int smem = threads * sizeof(float);
+    bias_grad_accum_kernel<<<cols, threads, smem>>>(grad, rows, cols, scale, bias);
+}
+
+// --- Extract own-edge portion of packed K/V gradient back to [T_q, D] layout ---
+// Reverse of kv_copy_own_edge. For query i, the packed slots
+// [kv_offset[i] + anc_length[i] .. kv_offset[i] + anc_length[i] + own_length[i])
+// map to d_out[query_offsets[i] + j, col] for j in [0, own_length[i]).
+// Each T_q position belongs to exactly one query, so the uncopy is a bijection.
+__global__ void kv_uncopy_own_edge_kernel(const float* packed_grad,
+                                            const int* query_offsets,
+                                            const int* kv_offsets,
+                                            const int* anc_lengths,
+                                            const int* own_lengths,
+                                            float* d_out,     // [T_q, D], zeroed by caller
+                                            int N, int n_heads, int head_dim) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int d_model = n_heads * head_dim;
+    int nidx = idx / d_model;
+    int col = idx % d_model;
+    if (nidx >= N) return;
+
+    int q_off  = query_offsets[nidx];
+    int kv_off = kv_offsets[nidx];
+    int anc_len = anc_lengths[nidx];
+    int own_len = own_lengths[nidx];
+    int head = col / head_dim;
+    int hcol = col % head_dim;
+
+    for (int j = 0; j < own_len; j++) {
+        int p = anc_len + j;
+        float val = packed_grad[((kv_off + p) * n_heads + head) * head_dim + hcol];
+        d_out[(long long)(q_off + j) * d_model + col] = val;
+    }
+}
+
+void launch_kv_uncopy_own_edge(const float* packed_grad,
+                                const int* query_offsets,
+                                const int* kv_offsets,
+                                const int* anc_lengths,
+                                const int* own_lengths,
+                                float* d_out,
+                                int N, int n_heads, int head_dim) {
+    int d_model = n_heads * head_dim;
+    int total = N * d_model;
+    int threads = 256;
+    int blocks = (total + threads - 1) / threads;
+    kv_uncopy_own_edge_kernel<<<blocks, threads>>>(packed_grad, query_offsets, kv_offsets,
+                                                    anc_lengths, own_lengths, d_out,
+                                                    N, n_heads, head_dim);
+}
+
 // --- Copy own-edge K/V from fresh d_k[T_q, D] into the packed prefix buffer ---
 // For query i, own_len[i] positions starting at query_offsets[i] in d_k_fresh
 // are appended after the query's anc_length[i] ancestor slots in packed_kv.
@@ -3366,6 +3442,12 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
     CUDA_CHECK(cudaMalloc(&d_loss,               (long long)N_cap * sizeof(float)));
     CUDA_CHECK(cudaMalloc(&d_d_final_out,        (long long)N_cap * D * sizeof(float)));
 
+    // Scratch buffers for own-edge K/V gradient extraction (bias/weight backward).
+    // Sized to T_q_cap so they can hold any chunk's worth of per-query K/V grads.
+    float *d_dk_own = NULL, *d_dv_own = NULL;
+    CUDA_CHECK(cudaMalloc(&d_dk_own,             (long long)T_q_cap * D * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&d_dv_own,             (long long)T_q_cap * D * sizeof(float)));
+
     // Per-layer saved state (for backward)
     float** sv_x_res1 = (float**)malloc(L_layers * sizeof(float*));
     float** sv_ln1_norm = (float**)malloc(L_layers * sizeof(float*));
@@ -4487,12 +4569,14 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
 
                 // Output projection backward — all T_q rows.
                 float* dG_out = d_grads + wo.out_w;
+                float* dB_out_g = d_grads + wo.out_b;
                 // d_d_final_out[T_q, D] = d_d_logits[T_q, V] × W_out^T[V, D]
                 CUBLAS_CHECK(cublasSgemm(cublas, CUBLAS_OP_T, CUBLAS_OP_N, D, T_q, V,
                                           &alpha, W_out, V, d_d_logits, V, &beta_zero, d_d_final_out, D));
-                // dW_out += d_final_out^T × d_d_logits (scaled)
+                // dW_out += d_final_out^T × d_d_logits (scaled); dB_out += col-sum(d_d_logits)
                 CUBLAS_CHECK(cublasSgemm(cublas, CUBLAS_OP_N, CUBLAS_OP_T, V, D, T_q,
                                           &grad_scale, d_d_logits, V, d_final_out, D, &alpha, dG_out, V));
+                launch_bias_grad_accum(d_d_logits, T_q, V, grad_scale, dB_out_g);
 
                 // Final LN backward over all T_q rows.
                 float* dG_fn = d_grads + wo.final_gamma;
@@ -4528,31 +4612,46 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
                     // d_x split at residual 2: one branch through FFN, skip added later
                     CUDA_CHECK(cudaMemcpy(d_d_ff_out, d_dx, (long long)T_q * D * sizeof(float), cudaMemcpyDeviceToDevice));
 
-                    // FFN L2 backward: d_ff_out → d_ff_h
+                    // FFN L2 backward: d_ff_out → d_ff_h;  dW_2 += ff_h^T × d_ff_out;
+                    //                                       db_2 += col-sum(d_ff_out).
                     CUBLAS_CHECK(cublasSgemm(cublas, CUBLAS_OP_T, CUBLAS_OP_N, F, T_q, D,
                                               &alpha, W_2w, D, d_d_ff_out, D, &beta_zero, d_d_ff_h, F));
                     CUBLAS_CHECK(cublasSgemm(cublas, CUBLAS_OP_N, CUBLAS_OP_T, D, F, T_q,
                                               &grad_scale, d_d_ff_out, D, sv_ff_h[l], F, &alpha, dW_2w, D));
+                    {
+                        float* dW_2b = d_grads + wo.l2_b[l];
+                        launch_bias_grad_accum(d_d_ff_out, T_q, D, grad_scale, dW_2b);
+                    }
 
                     // ReLU backward
                     cuda_relu_backward(d_d_ff_h, sv_ff_mask[l], d_d_ff_h, T_q * F);
 
-                    // FFN L1 backward: d_ff_h → d_ln2_out
+                    // FFN L1 backward: d_ff_h → d_ln2_out;  dW_1 += ln2_out^T × d_ff_h;
+                    //                                        db_1 += col-sum(d_ff_h).
                     CUBLAS_CHECK(cublasSgemm(cublas, CUBLAS_OP_T, CUBLAS_OP_N, D, T_q, F,
                                               &alpha, W_1w, F, d_d_ff_h, F, &beta_zero, d_d_ln_out, D));
                     CUBLAS_CHECK(cublasSgemm(cublas, CUBLAS_OP_N, CUBLAS_OP_T, F, D, T_q,
                                               &grad_scale, d_d_ff_h, F, sv_ln2_out[l], D, &alpha, dW_1w, F));
+                    {
+                        float* dW_1b = d_grads + wo.l1_b[l];
+                        launch_bias_grad_accum(d_d_ff_h, T_q, F, grad_scale, dW_1b);
+                    }
 
                     // LN2 backward
                     cuda_layer_norm_backward(d_d_ln_out, sv_ln2_norm[l], sv_ln2_std_inv[l],
                                               G2, d_d_ln_out, dG2, dB2, T_q, D);
                     launch_elem_add(d_dx, d_d_ln_out, T_q * D);  // residual 2 skip
 
-                    // WO backward: d_dx → d_attn_out
+                    // WO backward: d_dx → d_attn_out;  dW_o += attn_out^T × d_dx;
+                    //                                   db_o += col-sum(d_dx).
                     CUBLAS_CHECK(cublasSgemm(cublas, CUBLAS_OP_T, CUBLAS_OP_N, D, T_q, D,
                                               &alpha, W_ow, D, d_dx, D, &beta_zero, d_d_attn_out, D));
                     CUBLAS_CHECK(cublasSgemm(cublas, CUBLAS_OP_N, CUBLAS_OP_T, D, D, T_q,
                                               &grad_scale, d_dx, D, sv_attn_out[l], D, &alpha, dW_ow, D));
+                    {
+                        float* dW_ob = d_grads + wo.wo_b[l];
+                        launch_bias_grad_accum(d_dx, T_q, D, grad_scale, dW_ob);
+                    }
 
                     // Attention backward (L-queries)
                     // Re-compute post-RoPE Q/K and V from saved ln1_out. We need
@@ -4631,13 +4730,67 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
                     }
                     launch_rope_batched_inverse(d_dq_pack, d_rope_positions, d_rope_cos, d_rope_sin, T_q * H, HD);
 
-                    // dQ → d_ln1_out via Wq^T; dWq += ln1_out^T × dQ
+                    // dQ → d_ln1_out via Wq^T; dWq += ln1_out^T × dQ;
+                    //                            dwq_b += col-sum(dQ, scaled).
                     CUBLAS_CHECK(cublasSgemm(cublas, CUBLAS_OP_T, CUBLAS_OP_N, D, T_q, D,
                                               &alpha, d_weights + wo.wq_w[l], D,
                                               d_dq_pack, D, &beta_zero, d_d_ln_out, D));
                     CUBLAS_CHECK(cublasSgemm(cublas, CUBLAS_OP_N, CUBLAS_OP_T, D, D, T_q,
                                               &grad_scale, d_dq_pack, D,
                                               sv_ln1_out[l], D, &alpha, dW_qw, D));
+                    {
+                        float* dW_qb = d_grads + wo.wq_b[l];
+                        launch_bias_grad_accum(d_dq_pack, T_q, D, grad_scale, dW_qb);
+                    }
+
+                    // --- K/V path backward (previously missing: Wk/Wv/biases frozen) ---
+                    // Extract own-edge portion of packed dK/dV into [T_q, D] layout.
+                    // Ancestor-portion dK/dV is still dropped (cross-chunk scatter-add
+                    // into the compact cache is not implemented). Own-edge dK/dV is
+                    // what feeds Wk/Wv gradients for the current chunk's positions.
+                    CUDA_CHECK(cudaMemset(d_dk_own, 0, (long long)T_q * D * sizeof(float)));
+                    CUDA_CHECK(cudaMemset(d_dv_own, 0, (long long)T_q * D * sizeof(float)));
+                    launch_kv_uncopy_own_edge(d_dk_pack, d_query_offsets, d_kv_offsets,
+                                               d_anc_lengths_cache, d_own_lengths_cache,
+                                               d_dk_own, N, H, HD);
+                    launch_kv_uncopy_own_edge(d_dv_pack, d_query_offsets, d_kv_offsets,
+                                               d_anc_lengths_cache, d_own_lengths_cache,
+                                               d_dv_own, N, H, HD);
+
+                    // Inverse RoPE on dK (V has no RoPE). Match forward composition:
+                    // scalar shift (if any) then real-position rotation.
+                    if (chunk_cycle_shift > 0) {
+                        launch_rope_batched_scalar_inverse(d_dk_own, chunk_cycle_shift, d_rope_cos, d_rope_sin, T_q * H, HD);
+                    }
+                    launch_rope_batched_inverse(d_dk_own, d_rope_positions, d_rope_cos, d_rope_sin, T_q * H, HD);
+
+                    // dK → d_d_ln_out += d_dk_own × Wk^T;  dWk += ln1_out^T × d_dk_own;
+                    //                                      dwk_b += col-sum(d_dk_own)
+                    CUBLAS_CHECK(cublasSgemm(cublas, CUBLAS_OP_T, CUBLAS_OP_N, D, T_q, D,
+                                              &alpha, d_weights + wo.wk_w[l], D,
+                                              d_dk_own, D, &alpha, d_d_ln_out, D));
+                    {
+                        float* dW_kw = d_grads + wo.wk_w[l];
+                        float* dW_kb = d_grads + wo.wk_b[l];
+                        CUBLAS_CHECK(cublasSgemm(cublas, CUBLAS_OP_N, CUBLAS_OP_T, D, D, T_q,
+                                                  &grad_scale, d_dk_own, D,
+                                                  sv_ln1_out[l], D, &alpha, dW_kw, D));
+                        launch_bias_grad_accum(d_dk_own, T_q, D, grad_scale, dW_kb);
+                    }
+
+                    // dV → d_d_ln_out += d_dv_own × Wv^T;  dWv += ln1_out^T × d_dv_own;
+                    //                                      dwv_b += col-sum(d_dv_own)
+                    CUBLAS_CHECK(cublasSgemm(cublas, CUBLAS_OP_T, CUBLAS_OP_N, D, T_q, D,
+                                              &alpha, d_weights + wo.wv_w[l], D,
+                                              d_dv_own, D, &alpha, d_d_ln_out, D));
+                    {
+                        float* dW_vw = d_grads + wo.wv_w[l];
+                        float* dW_vb = d_grads + wo.wv_b[l];
+                        CUBLAS_CHECK(cublasSgemm(cublas, CUBLAS_OP_N, CUBLAS_OP_T, D, D, T_q,
+                                                  &grad_scale, d_dv_own, D,
+                                                  sv_ln1_out[l], D, &alpha, dW_vw, D));
+                        launch_bias_grad_accum(d_dv_own, T_q, D, grad_scale, dW_vb);
+                    }
 
                     // LN1 backward
                     cuda_layer_norm_backward(d_d_ln_out, sv_ln1_norm[l], sv_ln1_std_inv[l],
@@ -4851,6 +5004,8 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
     cudaFree(d_ff_h); cudaFree(d_ff_mask); cudaFree(d_ff_out);
     cudaFree(d_final_out); cudaFree(d_final_norm_save); cudaFree(d_final_std_inv_save);
     cudaFree(d_logits); cudaFree(d_d_logits); cudaFree(d_loss); cudaFree(d_d_final_out);
+    if (d_dk_own) cudaFree(d_dk_own);
+    if (d_dv_own) cudaFree(d_dv_own);
     for (int l = 0; l < L_layers; l++) {
         cudaFree(sv_x_res1[l]); cudaFree(sv_ln1_norm[l]); cudaFree(sv_ln1_std_inv[l]); cudaFree(sv_ln1_out[l]);
         cudaFree(sv_x_res2[l]); cudaFree(sv_ln2_norm[l]); cudaFree(sv_ln2_std_inv[l]); cudaFree(sv_ln2_out[l]);
