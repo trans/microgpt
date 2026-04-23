@@ -192,6 +192,41 @@ boundaries. Packed attention buffers remain fp32.
 - Next: d=32 global radix becomes borderline-feasible at 19 GB bf16 via
   unified memory paging (was 38 GB fp32).
 
+### Result: mass=1 compact cache (skips 83-96% of char positions)
+
+Radix edges with `edge_mass == 1` are leaves (a single corpus position).
+Nothing ever attends to their K/V as an ancestor, so they don't need
+cache storage. Own-edge K/V for the current query reads directly from the
+fresh d_k/d_v forward buffer (no round-trip through cache). Cache size
+drops dramatically.
+
+| depth | mass=1 fraction | fp32 orig | bf16 only | bf16 + compact |
+|---|---|---|---|---|
+| d=8  | 83% | 1582 MB | 791 MB | **274 MB** |
+| d=16 | 89% | 9500 MB | 4770 MB | **532 MB** |
+| d=32 | 96% | ~38 GB | ~19 GB | **570 MB** |
+
+d=32 is barely larger than d=16 because the extra depth is all mass=1
+tails. Empirical confirmation of the theoretical claim that branching
+structure saturates around d≈16 for Shakespeare.
+
+### Result: d=32 global-radix becomes tractable — new project best PPL
+
+With the compact cache, d=32 global-radix Lightning fits comfortably.
+3 SE × 260 samples, lr=2e-4, L3 p_stop=0.3, mass-off:
+
+| depth | PPL | optimizer steps |
+|---|---|---|
+| d=16 | 15.38 | 780 |
+| **d=32** | **12.07** | **780** |
+
+d=32 Lightning beats:
+- paper's d=32 baseline (13.17, per-subtree 3 SE × 195 steps)
+- previously recorded project best (13.36, d=32 linear mass-weight)
+
+Timing: d=32 ≈ 220 s/run (3 SE), d=16 ≈ 24 s/run. 7× slower but unlocks
+deeper branching supervision.
+
 ## Run
 
 ```sh
