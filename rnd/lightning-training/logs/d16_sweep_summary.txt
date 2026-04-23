@@ -1,0 +1,16 @@
+==============================================================
+Lightning d=16 sweep (per-subtree file format)
+  init: data/input.random.model  trie: /tmp/agpt_input_d16_radix_pst  git: 399565b
+  reference: deterministic d=16 3 SE × 65 steps lr=3e-3 ≈ 14.59
+==============================================================
+d16-l3-s65-lr3e-3  run 1  PPL = 17.2623  time = 25s  (rc=0)
+d16-l3-s65-lr3e-3  run 2  PPL = 16.2555  time = 29s  (rc=0)
+d16-l3-s65-lr3e-3  run 3  PPL = 14.5962  time = 27s  (rc=0)
+d16-l3-s260-lr3e-4  run 1  PPL = 15.9228  time = 74s  (rc=0)
+d16-l3-s260-lr3e-4  run 2  PPL = 16.4424  time = 85s  (rc=0)
+d16-l3-s260-lr3e-4  run 3  PPL = 15.8046  time = 82s  (rc=0)
+d16-l3-s650-lr1e-4  run 1  PPL = 15.5212  time = 185s  (rc=0)
+d16-l3-s650-lr1e-4  run 2  PPL = 14.7206  time = 189s  (rc=0)
+d16-l3-s650-lr1e-4  run 3  PPL = 16.7276  time = 188s  (rc=0)
+
+Done.

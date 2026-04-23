@@ -3307,11 +3307,11 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
                         "depth stochastically via p_stop. Use one or the other.\n");
         exit(1);
     }
-    if (lightning_active && single_subtree) {
-        fprintf(stderr, "Lightning resamples subtrees each epoch; --single-subtree's one-subtree "
-                        "layout would be discarded. Do not combine.\n");
-        exit(1);
-    }
+    // Note: Lightning + single_subtree is allowed. single_subtree collapses the
+    // 65 root-child buckets into one list; Lightning then overwrites that list
+    // with N stochastic samples. The collapse is wasted work but harmless. This
+    // path is used by run_per_subtree_training when loading one root-child at a
+    // time — each loaded view is effectively a single-subtree trie.
     if (lightning_active && partition_depth > 1) {
         fprintf(stderr, "Lightning resamples subtrees each epoch; --partition-depth's n-gram "
                         "bucket layout would be discarded. Do not combine.\n");
@@ -4322,7 +4322,8 @@ int run_per_subtree_training(const Config& cfg_in, const WeightOffsets& wo,
                               LRSchedule lr_schedule, int warmup_super_epochs,
                               float weight_decay, float grad_clip_norm, int save_every,
                               CurriculumMode curriculum, const char* save_path,
-                              bool lr_scale_by_steps = false)
+                              bool lr_scale_by_steps = false,
+                              LightningConfig lightning = LightningConfig{})
 {
     // Auto-LR scaling: the optimal LR depends on total gradient-movement per pass
     // (lr × steps_per_super_epoch ≈ constant for a fixed depth). The winning d=16
@@ -4333,7 +4334,10 @@ int run_per_subtree_training(const Config& cfg_in, const WeightOffsets& wo,
     // calibrated against — don't change without a fresh calibration.
     Config cfg = cfg_in;
     const int LR_SCALE_REFERENCE_STEPS = 65;
-    int steps_per_super_epoch = manifest.n_subtrees * subtree_splits;
+    const bool lightning_active = (lightning.steps > 0);
+    int steps_per_super_epoch = lightning_active
+        ? lightning.steps
+        : manifest.n_subtrees * subtree_splits;
     if (lr_scale_by_steps && steps_per_super_epoch > 0) {
         float scale = (float)LR_SCALE_REFERENCE_STEPS / (float)steps_per_super_epoch;
         float scaled_lr = cfg_in.lr * scale;
@@ -4342,8 +4346,16 @@ int run_per_subtree_training(const Config& cfg_in, const WeightOffsets& wo,
                LR_SCALE_REFERENCE_STEPS, steps_per_super_epoch);
         cfg.lr = scaled_lr;
     } else {
-        printf("Per-subtree training: %d subtrees, %d super-epochs\n",
-               manifest.n_subtrees, super_epochs);
+        printf("Per-subtree training: %d subtrees, %d super-epochs%s\n",
+               manifest.n_subtrees, super_epochs,
+               lightning_active ? " (Lightning stochastic sampling)" : "");
+    }
+    if (lightning_active) {
+        const char* sname = (lightning.sampler == LightningSampler::L1_Uniform) ? "l1-uniform"
+                          : (lightning.sampler == LightningSampler::L2_RcDepth) ? "l2-rc-depth"
+                          :                                                        "l3-mass-walk";
+        printf("  lightning: %s, %d samples/SE total, p_stop=%.2f, seed=0x%x\n",
+               sname, lightning.steps, lightning.p_stop, lightning.seed);
     }
 
     const char* opt_name = (optimizer == OptimizerKind::Adam)     ? "adam"
@@ -4392,6 +4404,24 @@ int run_per_subtree_training(const Config& cfg_in, const WeightOffsets& wo,
            manifest.entries[largest_idx].root_child_id, largest_chars,
            largest_chars * cfg.d_model * 4.0 * 2 * cfg.n_layers / 1e6);
 
+    // Lightning over per-subtree files: pre-sample root-child indices per SE,
+    // weighted by each subtree's total_edge_chars (a proxy for corpus mass
+    // flowing through that root-child; more principled would be to read each
+    // subtree's edge_mass[0] but that requires a one-time scan). Each
+    // root-child with ≥1 bucketed sample gets loaded once per SE and runs
+    // that many Lightning samples within its local view.
+    unsigned lightning_outer_rng = lightning.seed;
+    double* lightning_rc_weights = NULL;
+    double lightning_rc_total_weight = 0.0;
+    if (lightning_active) {
+        lightning_rc_weights = (double*)malloc(manifest.n_subtrees * sizeof(double));
+        for (int i = 0; i < manifest.n_subtrees; i++) {
+            lightning_rc_weights[i] = (double)manifest.entries[i].total_edge_chars;
+            lightning_rc_total_weight += lightning_rc_weights[i];
+        }
+        if (lightning_rc_total_weight <= 0.0) lightning_rc_total_weight = 1.0;
+    }
+
     for (int ep = 0; ep < super_epochs; ep++) {
         struct timespec t0, t1;
         clock_gettime(CLOCK_MONOTONIC, &t0);
@@ -4399,8 +4429,68 @@ int run_per_subtree_training(const Config& cfg_in, const WeightOffsets& wo,
         long long super_nodes_trained = 0;
         int subtrees_done = 0;
 
-        // Visit subtrees in size-descending order on the first super-epoch
-        // (surface OOM early); simple rc-id order afterward for determinism.
+        // ---- Lightning path ----
+        if (lightning_active) {
+            // Bucket this SE's lightning.steps samples by root-child index,
+            // weighted by total_edge_chars.
+            int* bucket = (int*)calloc(manifest.n_subtrees, sizeof(int));
+            for (int s = 0; s < lightning.steps; s++) {
+                double u = (double)xorshift_float01(&lightning_outer_rng) * lightning_rc_total_weight;
+                double acc = 0.0;
+                int pick = manifest.n_subtrees - 1;
+                for (int i = 0; i < manifest.n_subtrees; i++) {
+                    acc += lightning_rc_weights[i];
+                    if (u <= acc) { pick = i; break; }
+                }
+                bucket[pick]++;
+            }
+            int touched = 0, max_bucket = 0;
+            for (int i = 0; i < manifest.n_subtrees; i++) {
+                if (bucket[i] > 0) touched++;
+                if (bucket[i] > max_bucket) max_bucket = bucket[i];
+            }
+            printf("  SE %d lightning buckets: %d root-children touched, max %d samples/rc\n",
+                   ep + 1, touched, max_bucket);
+
+            for (int i = 0; i < manifest.n_subtrees; i++) {
+                if (bucket[i] == 0) continue;
+                SubtreeData s = load_subtree(manifest, i);
+                RadixView view = subtree_to_radix_view(s);
+
+                TrainPersistence persist;
+                persist.h_adam_m_io = h_adam_m;
+                persist.h_adam_v_io = h_adam_v;
+                persist.adam_t_io = &adam_t;
+                persist.quiet = true;
+                persist.total_opt_steps_override = total_opt_steps;
+                persist.warmup_steps_override = warmup_steps;
+
+                // Build a per-call Lightning config with steps scoped to this
+                // root-child's bucket. Reuse the same sampler/p_stop/mass-lr
+                // settings but derive the inner RNG seed from seed+ep+rc so
+                // runs are reproducible and bucket sequences diverge across SEs.
+                LightningConfig inner = lightning;
+                inner.steps = bucket[i];
+                inner.seed  = lightning.seed ^ (unsigned)(0x9E3779B9u * (ep + 1)) ^ (unsigned)(0x85EBCA6Bu * (i + 1));
+
+                run_radix_training(cfg, wo, h_weights, view.t,
+                                   /*epochs=*/1, entropy_lambda, mass_weight, subtree_splits, partition_depth, accumulate,
+                                   /*single_subtree=*/true, intermediate_weight,
+                                   optimizer, momentum_beta, rmsprop_beta,
+                                   lr_schedule, warmup_super_epochs,
+                                   weight_decay, grad_clip_norm, /*save_every=*/0,
+                                   curriculum, /*save_path=*/NULL,
+                                   inner, &persist);
+
+                super_nodes_trained += s.n_nodes;
+                subtrees_done++;
+
+                free_radix_view(view);
+                free_subtree(s);
+            }
+            free(bucket);
+        } else {
+        // ---- Deterministic per-root-child path (existing) ----
         for (int ii = 0; ii < manifest.n_subtrees; ii++) {
             int i = ii;
             if (ep == 0 && ii == 0) i = largest_idx;
@@ -4435,6 +4525,7 @@ int run_per_subtree_training(const Config& cfg_in, const WeightOffsets& wo,
             free_radix_view(view);
             free_subtree(s);
         }
+        }
 
         clock_gettime(CLOCK_MONOTONIC, &t1);
         double elapsed = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9;
@@ -4455,6 +4546,7 @@ int run_per_subtree_training(const Config& cfg_in, const WeightOffsets& wo,
         printf("Saved to %s\n", save_path);
     }
     free(h_adam_m); free(h_adam_v);
+    if (lightning_rc_weights) free(lightning_rc_weights);
     printf("Done.\n");
     return 0;
 }
@@ -4681,7 +4773,8 @@ int main(int argc, char** argv) {
                                            lr_schedule, warmup_epochs,
                                            weight_decay, grad_clip_norm, save_every,
                                            curriculum, save_path,
-                                           lr_scale_by_steps);
+                                           lr_scale_by_steps,
+                                           lightning);
         free(manifest.entries);
         return rc;
     }

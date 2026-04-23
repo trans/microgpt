@@ -139,6 +139,30 @@ the full variance at matched step counts; LR compensates.
 Next: push to s=1300 or higher with matching LR cuts, or run enough seeds
 at s=260 lr=3e-4 to statistically verify the gap to baseline.
 
+### Result: d=16 Lightning via per-subtree files
+
+Wired Lightning into `run_per_subtree_training` so d=16 becomes tractable:
+each root-child subtree file is loaded with its own bounded KV cache
+(~150 MB - 1.3 GB), samples are bucketed across root-children weighted by
+`total_edge_chars`. Peak memory use is the single largest root-child's KV,
+not the 9.5 GB global cache that would need to fit for direct global-radix
+Lightning at d=16.
+
+L3 p_stop=0.3 mass-off, 3 SE:
+
+| config | mean PPL | min | max | spread |
+|---|---|---|---|---|
+| **deterministic d=16 3 SE × 65** | **~14.59** | — | — | — |
+| L3 s=65 lr=3e-3 (matched) | 16.04 | **14.60** | 17.26 | 2.67 |
+| L3 s=260 lr=3e-4 (4×) | 16.06 | 15.80 | 16.44 | **0.64** |
+| L3 s=650 lr=1e-4 (10×) | 15.66 | **14.72** | 16.73 | 2.01 |
+
+Same pattern as d=8: individual best runs reach baseline (14.60 matches
+within noise, 14.72 is close), mean is ~1-1.5 PPL worse. s=260 lr=3e-4
+again has tightest variance (0.64). s=650 lr=1e-4 has best mean AND
+highest ceiling individual run. The step-budget×LR trade mirrors d=8 —
+further LR sweeping at d=16 s=260 might close more of the gap.
+
 ## Run
 
 ```sh
