@@ -1,0 +1,31 @@
+==============================================================
+Phase 1: post-fix d=16 deterministic baseline (3 SE × 65 steps)
+  init: data/input.random.model  trie: /tmp/agpt_input_d16_radix  git: 1c858c0
+  pre-fix paper reference: 15.28
+==============================================================
+d16-det-const-lr3e-3  run 1  PPL = 15.1666  time = 20s  (rc=0)
+d16-det-const-lr3e-3  run 2  PPL = 15.7232  time = 21s  (rc=0)
+d16-det-const-lr3e-3  run 3  PPL = 13.9682  time = 21s  (rc=0)
+d16-det-const-lr1e-3  run 1  PPL = 15.3792  time = 20s  (rc=0)
+d16-det-const-lr1e-3  run 2  PPL = 15.0108  time = 21s  (rc=0)
+d16-det-const-lr1e-3  run 3  PPL = 15.2419  time = 21s  (rc=0)
+d16-det-const-lr3e-4  run 1  PPL = 16.4386  time = 21s  (rc=0)
+d16-det-const-lr3e-4  run 2  PPL = 16.4402  time = 20s  (rc=0)
+d16-det-const-lr3e-4  run 3  PPL = 16.3926  time = 20s  (rc=0)
+d16-det-wc-lr3e-3  run 1  PPL = 14.2288  time = 19s  (rc=0)
+d16-det-wc-lr3e-3  run 2  PPL = 14.2371  time = 20s  (rc=0)
+d16-det-wc-lr3e-3  run 3  PPL = 14.6645  time = 19s  (rc=0)
+d16-det-wc-lr1e-3  run 1  PPL = 16.2119  time = 19s  (rc=0)
+d16-det-wc-lr1e-3  run 2  PPL = 16.1861  time = 20s  (rc=0)
+d16-det-wc-lr1e-3  run 3  PPL = 16.1637  time = 19s  (rc=0)
+d16-det-wc-lr3e-4  run 1  PPL = 17.0072  time = 19s  (rc=0)
+d16-det-wc-lr3e-4  run 2  PPL = 17.0045  time = 19s  (rc=0)
+d16-det-wc-lr3e-4  run 3  PPL = 17.0051  time = 20s  (rc=0)
+d16-det-wc-lr3e-4-wd0.01  run 1  PPL = 17.0059  time = 19s  (rc=0)
+d16-det-wc-lr3e-4-wd0.01  run 2  PPL = 17.0067  time = 19s  (rc=0)
+d16-det-wc-lr3e-4-wd0.01  run 3  PPL = 17.0087  time = 20s  (rc=0)
+d16-det-wc-lr1e-3-wd0.01  run 1  PPL = 16.1849  time = 19s  (rc=0)
+d16-det-wc-lr1e-3-wd0.01  run 2  PPL = 16.2046  time = 20s  (rc=0)
+d16-det-wc-lr1e-3-wd0.01  run 3  PPL = 16.1143  time = 19s  (rc=0)
+
+Done.

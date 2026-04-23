@@ -1,0 +1,5 @@
+==============================================================
+Phase 2: post-fix d=32 deterministic baseline (3 SE × 65 steps)
+  init: data/input.random.model  trie: /tmp/agpt_input_d32_radix  git: 1c858c0
+  pre-fix paper reference: 13.17  |  pre-fix linear-mass: 13.36
+==============================================================
