@@ -152,6 +152,10 @@ struct LightningConfig {
     LightningSampler  sampler    = LightningSampler::L3_MassWalk;
     float             p_stop     = 0.3f;       // L3 stopping probability at each level
     unsigned          seed       = 0x5c115e1u; // sampler RNG seed
+    // Virtual-tree training: K>1 extends effective context past D* by
+    // looping root-walks at mass>1 leaves, reusing the compact cache via
+    // delta-RoPE at gather time. K=1 is plain AGPT (no virtual extension).
+    int               virtual_cycles = 1;
     // Per-sample LR scaling by subtree mass (adaptive form of #4 from the
     // design discussion — LR scaling beats gradient scaling under RMSProp/Adam
     // because gradient scaling cancels in the adaptive divisor).
@@ -1584,6 +1588,103 @@ void launch_kv_gather_anc_compact_bf16(const __nv_bfloat16* global_kv,
     kv_gather_anc_compact_bf16<<<blocks, threads>>>(global_kv, ancestor_ids, ancestor_offsets,
                                                      kv_offsets, anc_lengths, compact_slot, packed_kv,
                                                      N, n_heads, head_dim);
+}
+
+// --- K-specific ancestor gather with delta-RoPE ---
+// Stored K is post-real-RoPE (rotated by θ(real_pos)). For virtual-tree reuse,
+// the same cache entry needs to serve a different read position. We apply a
+// delta rotation Δθ = θ(read_pos) - θ(real_pos) per dim-pair.
+//
+// Using the identity:
+//   cos(a - b) = cos(a)cos(b) + sin(a)sin(b)
+//   sin(a - b) = sin(a)cos(b) - cos(a)sin(b)
+// we can compute the delta rotation from two position lookups in the same
+// RoPE cos/sin tables, without needing a separate delta cache.
+//
+// When read_pos == real_pos (K=1 training, no virtual), Δθ = 0 and the
+// kernel is bit-identical to kv_gather_anc_compact_bf16.
+__global__ void kv_gather_k_anc_delta_rope_kernel(const __nv_bfloat16* global_k,
+                                                    const int* ancestor_ids,       // char_pos
+                                                    const int* ancestor_offsets,
+                                                    const int* kv_offsets,
+                                                    const int* anc_lengths,
+                                                    const int* compact_slot,
+                                                    const int* read_pos_flat,      // [T_anc] RoPE read position
+                                                    const int* real_pos_of_char,   // [total_edge_chars] char_pos → real RoPE pos
+                                                    const float* rope_cos,
+                                                    const float* rope_sin,
+                                                    float* packed_k,
+                                                    int N, int n_heads, int head_dim) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int d_model = n_heads * head_dim;
+    int total = N * (d_model / 2);   // one thread per (node, half-dim)
+    if (idx >= total) return;
+
+    int nidx = idx / (d_model / 2);
+    int hi   = idx % (d_model / 2);   // half-dim index
+
+    int anc_off = ancestor_offsets[nidx];
+    int kv_off  = kv_offsets[nidx];
+    int len     = anc_lengths[nidx];
+
+    int j0 = 2 * hi;
+    int j1 = j0 + 1;
+    int head = j0 / head_dim;
+    int hcol0 = j0 % head_dim;
+    // (hcol1 = hcol0 + 1, always in the same head since head_dim is even)
+
+    for (int p = 0; p < len; p++) {
+        int char_pos = ancestor_ids[anc_off + p];
+        int slot = compact_slot[char_pos];
+        float x0, x1;
+        if (slot >= 0) {
+            x0 = __bfloat162float(global_k[(long long)slot * d_model + j0]);
+            x1 = __bfloat162float(global_k[(long long)slot * d_model + j1]);
+        } else {
+            x0 = 0.0f; x1 = 0.0f;
+        }
+
+        // Delta rotation: Rot(θ_read - θ_real) applied to (x0, x1).
+        // Stored entry used rope angle at real_pos; target is read_pos.
+        int rp = real_pos_of_char[char_pos];
+        int wp = read_pos_flat[anc_off + p];
+        float cr = rope_cos[rp * head_dim + hcol0];
+        float sr = rope_sin[rp * head_dim + hcol0];
+        float cw = rope_cos[wp * head_dim + hcol0];
+        float sw = rope_sin[wp * head_dim + hcol0];
+        float cd = cw * cr + sw * sr;   // cos(θ_read - θ_real)
+        float sd = sw * cr - cw * sr;   // sin(θ_read - θ_real)
+
+        float y0 = x0 * cd - x1 * sd;
+        float y1 = x0 * sd + x1 * cd;
+
+        // Packed layout: [(kv_off + p) * n_heads + head] * head_dim + hcol
+        int base = ((kv_off + p) * n_heads + head) * head_dim;
+        packed_k[base + hcol0] = y0;
+        packed_k[base + hcol0 + 1] = y1;
+    }
+}
+
+void launch_kv_gather_k_anc_delta_rope(const __nv_bfloat16* global_k,
+                                        const int* ancestor_ids,
+                                        const int* ancestor_offsets,
+                                        const int* kv_offsets,
+                                        const int* anc_lengths,
+                                        const int* compact_slot,
+                                        const int* read_pos_flat,
+                                        const int* real_pos_of_char,
+                                        const float* rope_cos,
+                                        const float* rope_sin,
+                                        float* packed_k,
+                                        int N, int n_heads, int head_dim) {
+    int d_model = n_heads * head_dim;
+    int total = N * (d_model / 2);
+    int threads = 256;
+    int blocks = (total + threads - 1) / threads;
+    kv_gather_k_anc_delta_rope_kernel<<<blocks, threads>>>(
+        global_k, ancestor_ids, ancestor_offsets, kv_offsets, anc_lengths,
+        compact_slot, read_pos_flat, real_pos_of_char, rope_cos, rope_sin,
+        packed_k, N, n_heads, head_dim);
 }
 
 // --- Copy own-edge K/V from fresh d_k[T_q, D] into the packed prefix buffer ---
@@ -3085,6 +3186,28 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
     CUDA_CHECK(cudaMemcpy(d_compact_slot, compact_slot,
                           (long long)trie.total_edge_chars * sizeof(int), cudaMemcpyHostToDevice));
 
+    // Precompute real RoPE position per char_pos. Matches the forward's scatter
+    // convention: pos = first_char_depth + j - 1, clamped to [0, seq_len-1].
+    // Used by the delta-RoPE K gather so it can reconstruct the real rotation
+    // angle of each cached entry. Virtual-tree training will pass different
+    // read positions to the same cache entries.
+    int* real_pos_of_char = (int*)malloc((long long)trie.total_edge_chars * sizeof(int));
+    for (int r = 0; r < trie.radix_count; r++) {
+        int start = trie.edge_starts[r];
+        int len   = trie.edge_lens[r];
+        int fcd   = trie.edge_first_char_depths[r];
+        for (int j = 0; j < len; j++) {
+            int pos = fcd + j - 1;
+            if (pos < 0) pos = 0;
+            if (pos >= cfg.seq_len) pos = cfg.seq_len - 1;
+            real_pos_of_char[start + j] = pos;
+        }
+    }
+    int* d_real_pos_of_char;
+    CUDA_CHECK(cudaMalloc(&d_real_pos_of_char, (long long)trie.total_edge_chars * sizeof(int)));
+    CUDA_CHECK(cudaMemcpy(d_real_pos_of_char, real_pos_of_char,
+                          (long long)trie.total_edge_chars * sizeof(int), cudaMemcpyHostToDevice));
+
     long long kv_bytes = n_compact_chars * (long long)D * (long long)sizeof(__nv_bfloat16);
     long long total_kv_bytes = kv_bytes * 2 * L_layers;
     {
@@ -3935,6 +4058,12 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
                 int* h_anc_offsets  = (int*)malloc((N + 1) * sizeof(int));
                 int* h_anc_lengths  = (int*)malloc(N * sizeof(int));
                 int* h_own_lengths  = (int*)malloc(N * sizeof(int));
+                // Per-slot target read position used by the delta-RoPE K gather.
+                // Phase 0 (K=1): read_pos == real_pos, delta = 0 (kernel is
+                // bit-identical to a plain gather). Phase 2+ (virtual) will
+                // populate this with virtual-cycle-shifted positions so the
+                // same cache entries serve K*D effective context.
+                int* h_read_pos_flat = (int*)malloc((T_anc > 0 ? T_anc : 1) * sizeof(int));
                 {
                     int fill = 0;
                     for (int i = 0; i < N; i++) {
@@ -3942,17 +4071,22 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
                         int r = h_radix_ids[i];
                         int anc_off = trie.ancestor_char_offsets[r];
                         int anc_len = trie.ancestor_char_offsets[r + 1] - anc_off;
-                        for (int a = 0; a < anc_len; a++)
-                            h_anc_ids[fill++] = trie.ancestor_char_ids[anc_off + a];
+                        for (int a = 0; a < anc_len; a++) {
+                            int char_pos = trie.ancestor_char_ids[anc_off + a];
+                            h_anc_ids[fill] = char_pos;
+                            h_read_pos_flat[fill] = real_pos_of_char[char_pos];
+                            fill++;
+                        }
                         h_anc_lengths[i] = anc_len;
                         h_own_lengths[i] = trie.edge_lens[r];
                     }
                     h_anc_offsets[N] = fill;
                 }
-                static int* d_anc_ids_cache      = NULL; static int d_anc_ids_cap      = 0;
-                static int* d_anc_offsets_cache  = NULL; static int d_anc_offsets_cap  = 0;
-                static int* d_anc_lengths_cache  = NULL; static int d_anc_lengths_cap  = 0;
-                static int* d_own_lengths_cache  = NULL; static int d_own_lengths_cap  = 0;
+                static int* d_anc_ids_cache       = NULL; static int d_anc_ids_cap       = 0;
+                static int* d_anc_offsets_cache   = NULL; static int d_anc_offsets_cap   = 0;
+                static int* d_anc_lengths_cache   = NULL; static int d_anc_lengths_cap   = 0;
+                static int* d_own_lengths_cache   = NULL; static int d_own_lengths_cap   = 0;
+                static int* d_read_pos_flat_cache = NULL; static int d_read_pos_flat_cap = 0;
                 if (T_anc > d_anc_ids_cap) {
                     if (d_anc_ids_cache) cudaFree(d_anc_ids_cache);
                     CUDA_CHECK(cudaMalloc(&d_anc_ids_cache, (T_anc > 0 ? T_anc : 1) * sizeof(int)));
@@ -3973,13 +4107,19 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
                     CUDA_CHECK(cudaMalloc(&d_own_lengths_cache, N * sizeof(int)));
                     d_own_lengths_cap = N;
                 }
+                if (T_anc > d_read_pos_flat_cap) {
+                    if (d_read_pos_flat_cache) cudaFree(d_read_pos_flat_cache);
+                    CUDA_CHECK(cudaMalloc(&d_read_pos_flat_cache, (T_anc > 0 ? T_anc : 1) * sizeof(int)));
+                    d_read_pos_flat_cap = T_anc;
+                }
                 if (T_anc > 0) {
                     CUDA_CHECK(cudaMemcpy(d_anc_ids_cache, h_anc_ids, T_anc * sizeof(int), cudaMemcpyHostToDevice));
+                    CUDA_CHECK(cudaMemcpy(d_read_pos_flat_cache, h_read_pos_flat, T_anc * sizeof(int), cudaMemcpyHostToDevice));
                 }
                 CUDA_CHECK(cudaMemcpy(d_anc_offsets_cache, h_anc_offsets, (N + 1) * sizeof(int), cudaMemcpyHostToDevice));
                 CUDA_CHECK(cudaMemcpy(d_anc_lengths_cache, h_anc_lengths, N * sizeof(int), cudaMemcpyHostToDevice));
                 CUDA_CHECK(cudaMemcpy(d_own_lengths_cache, h_own_lengths, N * sizeof(int), cudaMemcpyHostToDevice));
-                free(h_anc_ids); free(h_anc_offsets); free(h_anc_lengths); free(h_own_lengths);
+                free(h_anc_ids); free(h_anc_offsets); free(h_anc_lengths); free(h_own_lengths); free(h_read_pos_flat);
 
                 // Upload
                 CUDA_CHECK(cudaMemcpy(d_radix_ids,      h_radix_ids,      N * sizeof(int), cudaMemcpyHostToDevice));
@@ -4087,10 +4227,20 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
 
                     // Build packed prefix: [ancestors from cache | own-edge from fresh d_k/d_v]
                     // Ancestors: gather from compact cache (all ancestors are mass>1 → slot>=0).
-                    // Own-edge: copy directly from this chunk's freshly-computed post-RoPE d_k / d_v.
-                    launch_kv_gather_anc_compact_bf16(d_kv_keys[l], d_anc_ids_cache, d_anc_offsets_cache,
-                                                      d_kv_offsets, d_anc_lengths_cache, d_compact_slot,
-                                                      d_kv_pack_k, N, H, HD);
+                    // When virtual-tree training is active (K>1), K gather uses delta-RoPE so
+                    // the same cache entry can serve a virtual read position; otherwise the
+                    // plain gather is used (faster, no extra trig). V has no RoPE.
+                    if (lightning.virtual_cycles > 1) {
+                        launch_kv_gather_k_anc_delta_rope(d_kv_keys[l], d_anc_ids_cache, d_anc_offsets_cache,
+                                                          d_kv_offsets, d_anc_lengths_cache, d_compact_slot,
+                                                          d_read_pos_flat_cache, d_real_pos_of_char,
+                                                          d_rope_cos, d_rope_sin,
+                                                          d_kv_pack_k, N, H, HD);
+                    } else {
+                        launch_kv_gather_anc_compact_bf16(d_kv_keys[l], d_anc_ids_cache, d_anc_offsets_cache,
+                                                          d_kv_offsets, d_anc_lengths_cache, d_compact_slot,
+                                                          d_kv_pack_k, N, H, HD);
+                    }
                     launch_kv_gather_anc_compact_bf16(d_kv_values[l], d_anc_ids_cache, d_anc_offsets_cache,
                                                       d_kv_offsets, d_anc_lengths_cache, d_compact_slot,
                                                       d_kv_pack_v, N, H, HD);
@@ -4288,10 +4438,19 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
                     cuda_bias_add(d_v, d_weights + wo.wv_b[l], T_q, D);
 
                     // Gather packed K/V for backward: ancestors from compact cache,
-                    // own-edge from freshly-recomputed d_k/d_v.
-                    launch_kv_gather_anc_compact_bf16(d_kv_keys[l], d_anc_ids_cache, d_anc_offsets_cache,
-                                                      d_kv_offsets, d_anc_lengths_cache, d_compact_slot,
-                                                      d_kv_pack_k, N, H, HD);
+                    // own-edge from freshly-recomputed d_k/d_v. Delta-RoPE K gather
+                    // only when virtual-tree mode is active.
+                    if (lightning.virtual_cycles > 1) {
+                        launch_kv_gather_k_anc_delta_rope(d_kv_keys[l], d_anc_ids_cache, d_anc_offsets_cache,
+                                                          d_kv_offsets, d_anc_lengths_cache, d_compact_slot,
+                                                          d_read_pos_flat_cache, d_real_pos_of_char,
+                                                          d_rope_cos, d_rope_sin,
+                                                          d_kv_pack_k, N, H, HD);
+                    } else {
+                        launch_kv_gather_anc_compact_bf16(d_kv_keys[l], d_anc_ids_cache, d_anc_offsets_cache,
+                                                          d_kv_offsets, d_anc_lengths_cache, d_compact_slot,
+                                                          d_kv_pack_k, N, H, HD);
+                    }
                     launch_kv_gather_anc_compact_bf16(d_kv_values[l], d_anc_ids_cache, d_anc_offsets_cache,
                                                       d_kv_offsets, d_anc_lengths_cache, d_compact_slot,
                                                       d_kv_pack_v, N, H, HD);
@@ -4555,8 +4714,10 @@ int run_radix_training(const Config& cfg, const WeightOffsets& wo,
     free(subtree_nodes); free(subtree_sizes);
     if (lightning_children_offsets) free(lightning_children_offsets);
     if (lightning_children_flat)    free(lightning_children_flat);
-    if (compact_slot)    free(compact_slot);
-    if (d_compact_slot)  cudaFree(d_compact_slot);
+    if (compact_slot)       free(compact_slot);
+    if (d_compact_slot)     cudaFree(d_compact_slot);
+    if (real_pos_of_char)   free(real_pos_of_char);
+    if (d_real_pos_of_char) cudaFree(d_real_pos_of_char);
     if (depth_limit) {
         for (int i = 0; i < n_root_children; i++) free(depth_limit[i]);
         free(depth_limit);
@@ -4925,6 +5086,7 @@ int main(int argc, char** argv) {
         }
         else if (strcmp(argv[i], "--lightning-p-stop") == 0 && i + 1 < argc) lightning.p_stop = atof(argv[++i]);
         else if (strcmp(argv[i], "--lightning-seed") == 0 && i + 1 < argc) lightning.seed = (unsigned)strtoul(argv[++i], NULL, 0);
+        else if (strcmp(argv[i], "--virtual-cycles") == 0 && i + 1 < argc) lightning.virtual_cycles = atoi(argv[++i]);
         else if (strcmp(argv[i], "--lightning-mass-lr") == 0) {
             // Two-form: bare --lightning-mass-lr → log (safest), or followed by
             // off|log|sqrt|linear for explicit mode.
@@ -5000,6 +5162,10 @@ int main(int argc, char** argv) {
                         "                                l3 = mass-weighted top-down walk with p_stop.\n"
                         "  [--lightning-p-stop F]      — L3 stop probability at each level (default 0.3).\n"
                         "  [--lightning-seed N]        — sampler RNG seed (default 0x5c115e1).\n"
+                        "  [--virtual-cycles K]        — K>1 extends effective context to K·D* via\n"
+                        "                                root-loop at mass>1 leaves; reuses compact\n"
+                        "                                cache via delta-RoPE at gather time. K=1\n"
+                        "                                is plain AGPT (default).\n"
                         "  [--lightning-mass-lr [off|log|sqrt|linear]] — per-sample LR scaling by\n"
                         "                                subtree mass. Bare flag = log (safest).\n"
                         "                                Each sample's step_lr is multiplied by\n"
