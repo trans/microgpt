@@ -53,6 +53,15 @@ build-agpt-train:
     mkdir -p bin
     /opt/cuda/bin/nvcc -O2 src/cuda/agpt_train.cu src/cuda/kernels.cu -lcublas -o bin/agpt_train
 
+# Build weight-diff tool (used by foundational unit tests)
+build-check-weights:
+    mkdir -p bin
+    gcc -O2 tools/check_weights.c -o bin/check_weights
+
+# Run foundational AGPT CUDA-trainer unit tests (gradient flow, radix build, training sanity)
+test-agpt:
+    bash tests/test_agpt_fundamentals.sh
+
 # Build cloud GPU CLI
 build-cloud:
     mkdir -p bin
@@ -100,9 +109,18 @@ run *ARGS:
 cloud *ARGS:
     bin/cloud {{ARGS}}
 
-# Run all specs
-test:
-    crystal spec
+# Run Crystal-side specs (backward attention, leveled trie, chain compression)
+#
+# Crystal's main binary links to CUDA kernels via build/kernels.o. `crystal
+# spec` needs the same link flag or it fails at ld. Build stubs first (CPU
+# only; specs don't exercise GPU paths) then pass it to spec.
+test-crystal:
+    mkdir -p build
+    cc -c -O2 src/cuda/stubs.c -o build/kernels.o
+    crystal spec --link-flags="{{root}}/build/kernels.o -lstdc++"
+
+# Run ALL tests (Crystal specs + AGPT CUDA-trainer unit tests)
+test: test-crystal test-agpt
 
 # Generate all docs
 docs: docs-api
