@@ -58,6 +58,12 @@ build-check-weights:
     mkdir -p bin
     gcc -O2 tools/check_weights.c -o bin/check_weights
 
+# Build wrap-around corpus synthesizer (samples wrap-around walks from a radix trie)
+build-synth-wrap-corpus:
+    mkdir -p build bin
+    cc -c -O2 src/cuda/stubs.c -o build/kernels.o
+    timeout 3m crystal build src/tools/synth_wrap_corpus.cr -o bin/synth_wrap_corpus --release --link-flags="{{root}}/build/kernels.o -lstdc++"
+
 # Run foundational AGPT CUDA-trainer unit tests (gradient flow, radix build, training sanity)
 test-agpt:
     bash tests/test_agpt_fundamentals.sh
