@@ -1,0 +1,78 @@
+AGPT CUDA Training Engine
+  Model: d=64 heads=4 layers=2 ff=256 vocab=65 seq=128 head_dim=16
+  Loaded 108481 weight floats (423.8 KB)
+Loading radix trie from /tmp/agpt_input_d32_radix...
+  Radix trie: 1666215 nodes, 27046236 total edge chars, 33 endpoint depths
+  Radix loaded: 2780616 counts entries, 13382283 ancestor char entries
+  lr-schedule: warmup-cosine (peak=0.003, warmup_epochs=1)
+  optimizer: rmsprop (lr=0.003)
+  entropy lambda: 1.000 (branching-endpoint icing enabled)
+  mass weighting: linear (head-of-edge count restores corpus-frequency exposure)
+  curriculum: flat (d=max each epoch)
+  max edge_len: 32, max ancestor chars: 31, max KV per node: 63, max endpoint depth: 32
+  mass=1 compaction: 25933966 / 27046236 chars are mass=1 (95.9%); cache holds 1112270 positions
+  loop points: 985 (mass>1 leaves; 0.2% of 552869 mass>1 nodes)
+  KV cache: 569.5 MB unified memory (bf16 compact)
+  GPU memory: 4595.8 MB used, 3591.0 MB free, 8186.8 MB total
+  65 root-child subtrees: sizes min=1 max=254737 avg=25634.1 (total=1666214 radix nodes)
+Epoch 1: loss=3.623538  (20.83 sec, 65 subtrees, 576 chunks, 27046236 nodes)
+  residual top-10 (subtree_mass × max(avg_loss − 3.624, 0)):
+    rc   rootID   mass      avg_loss     score 
+    1    2        1488714   4.4425       1219226.1
+    43   44       738548    4.2583       468836.2
+    0    1        312404    5.1097       464294.9
+    44   45       118948    5.4648       219018.8
+    40   41       82994     4.5322       75412.8
+    45   46       94945     4.3249       66588.5
+    46   47       417105    3.7708       61409.4
+    41   42       114512    3.8250       23074.2
+    6    7        168692    3.7114       14814.5
+    8    9        63109     3.8480       14165.7
+    top-10: 41.5% of mass, 98.2% of excess-loss
+  hotspot-split: 65 → 156 subtrees (split 2 hotspots covering 63.1% of excess)
+Epoch 2: loss=2.603685  (20.65 sec, 156 subtrees, 638 chunks, 27046236 nodes)
+  residual top-10 (subtree_mass × max(avg_loss − 2.604, 0)):
+    rc   rootID   mass      avg_loss     score 
+    1    2        169892    6.1487       602272.3
+    43   44       94611     4.4744       176985.8
+    59   60       192970    3.0587       87798.5
+    0    1        312404    2.6501       14493.1
+    13   14       55465     2.7868       10157.6
+    58   59       545712    2.6218       9876.3
+    8    9        63109     2.7486       9142.7
+    6    7        168692    2.6542       8516.8
+    39   40       421017    2.6228       8048.0
+    54   55       76720     2.7043       7717.6
+    top-10: 24.2% of mass, 87.1% of excess-loss
+  hotspot-split: 156 → 211 subtrees (split 1 hotspots covering 56.1% of excess)
+Epoch 3: loss=2.485104  (23.69 sec, 211 subtrees, 757 chunks, 31016184 nodes)
+  residual top-10 (subtree_mass × max(avg_loss − 2.485, 0)):
+    rc   rootID   mass      avg_loss     score 
+    1    2        169892    6.2787       644507.0
+    43   44       94611     4.7920       218254.3
+    56   57       359544    2.8963       147843.4
+    54   55       76720     3.5469       81462.6
+    53   54       506831    2.5818       48995.9
+    59   60       192970    2.6583       33416.5
+    44   45       118948    2.6713       22152.6
+    49   50       51162     2.8257       17423.2
+    58   59       545712    2.5097       13405.7
+    57   58       379088    2.5169       12037.5
+    top-10: 25.0% of mass, 96.5% of excess-loss
+  hotspot-split: 211 → 266 subtrees (split 1 hotspots covering 50.2% of excess)
+Epoch 4: loss=2.344579  (26.78 sec, 266 subtrees, 876 chunks, 34986132 nodes)
+  residual top-10 (subtree_mass × max(avg_loss − 2.345, 0)):
+    rc   rootID   mass      avg_loss     score 
+    1    2        169892    5.6509       561709.3
+    43   44       94611     4.4482       199029.2
+    59   60       192970    2.8963       106457.7
+    58   59       545712    2.4336       48567.3
+    50   51       245479    2.4179       17988.0
+    54   55       76720     2.5654       16937.6
+    49   50       51162     2.5841       12253.3
+    61   62       134639    2.3997       7421.1
+    60   61       58238     2.4509       6193.6
+    40   41       82994     2.3914       3884.6
+    top-10: 14.6% of mass, 92.5% of excess-loss
+Saved to /tmp/pf_d32-hs0.5-4SE_r2.model
+Done.

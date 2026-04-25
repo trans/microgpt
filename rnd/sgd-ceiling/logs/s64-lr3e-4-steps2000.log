@@ -1,0 +1,307 @@
+Loaded checkpoint: /tmp/sgd_s64-lr3e-4-steps2000.model
+MiniGPT ready.
+  Vocab: 65 chars
+  Params: 108481
+  Config: d_model=64 n_layers=2 d_ff=256 seq_len=64 lr=0.0003
+  Backend: openblas
+  Model: /tmp/sgd_s64-lr3e-4-steps2000.model
+
+Step 0/2000 (epoch 0): loss = 5.2304 avg = 5.2304
+  seed: First Citizen:
+B
+  gen:  First Citizen:
+BYGNK
+nslY:YMesMcdddrM
+RDCDrMUj:?dbAvG;bZ;YyQMrgC
+OiRdFLO;nbn-edY,kL,M;YGbYYe
+dbd
+y;b,vdzdoLdNcb
+rsdc
+
+Step 50/2000 (epoch 0): loss = 3.0667 avg = 4.6185
+  seed: u, and you sland
+  gen:  u, and you slandn ja rntayob n dp?eke roe aat q
+osk   ataL
+ d isahet s
+ e   twenhy?
+teioee aeasWe a,eyaaraeh!oo e i 
+
+Step 100/2000 (epoch 0): loss = 2.9349 avg = 4.0892
+  seed: up, that all
+Fro
+  gen:  up, that all
+FrombU xso ye rn,
+
+heiy,  morN he t  v  t,t, f reoalo r
+
+ m uoatun t ;ein ysdecths
+ tk  h tdd r o,I,het
+
+Step 150/2000 (epoch 0): loss = 3.1004 avg = 3.7207
+  seed: e heart of gener
+  gen:  e heart of generee d s ry n W sifasonorlstVanhosotc
+n c;doonUcneu tasdn ;ralcod ov r t cmst,s selmtnbeuo nSsYheouhea
+
+Step 200/2000 (epoch 0): loss = 3.3205 avg = 3.5397
+  seed:  goes
+Upon this 
+  gen:   goes
+Upon this U aesotC mh t,?e
+ hno 
+coh y rairTh : iprd a h soohenster f :oasor oItheboUy:
+ef.ouThoun s U r
+
+ W s
+
+Step 250/2000 (epoch 0): loss = 3.1598 avg = 3.3498
+  seed: I hear hither yo
+  gen:  I hear hither yoTgofes re wroIuanHoue he iNpf nuer f dugs k r nwhe fse nheronirr e d.thI otdA n
+t r ?nAthe ans b on 
+
+Step 300/2000 (epoch 0): loss = 3.0007 avg = 3.2751
+  seed: ity Corioli; the
+  gen:  ity Corioli; thedoue foar 'acll,, f rgglut t o
+ watas I,une m
+:
+
+ llnIe n I p orlIn re,: ngl t theuoeAuuLnelir c Lso
+
+Step 350/2000 (epoch 0): loss = 3.1849 avg = 3.1648
+  seed: y.
+
+LARTIUS:
+O n
+  gen:  y.
+
+LARTIUS:
+O nd.
+
+ Lded oRmneatomorere, he ndeed t:
+
+ mee aln  neallsed mon ndon bln s therd methit ar o
+tis fes t
+
+Step 400/2000 (epoch 0): loss = 2.8972 avg = 3.0839
+  seed: our own.
+
+MARCIU
+  gen:  our own.
+
+MARCIUropt,'nscn Miirumarms fot otrtor:trsCed the
+ b  sane hA st th f euposd:
+os ok ais thare  a:
+bop dgat
+
+Step 450/2000 (epoch 0): loss = 3.0394 avg = 3.0036
+  seed: ame and envy. Fi
+  gen:  ame and envy. Fit3 nIut ndg he ,out l g thes atoo hethe s opous zh ath w as daIole ns hh tue fe t rstopis
+dt s be tU
+
+Step 500/2000 (epoch 0): loss = 2.7442 avg = 2.9193
+  seed: ore, be it known
+  gen:  ore, be it knownl at s rion.z the,
+IWTtodd t,enbeese W me n t Hiton hedeToCs than n he fas trsFle nds cotophrethero'
+
+Step 550/2000 (epoch 0): loss = 2.6948 avg = 2.8968
+  seed: 
+Not according t
+  gen:  
+Not according the f air t tothe t b t the herind ayo t th lis an bhhim
+Mithowerde tourgr, s tar b tis hime.
+feily h
+
+Step 600/2000 (epoch 0): loss = 2.7384 avg = 2.8439
+  seed: hed with the col
+  gen:  hed with the collani o'anesoume bIothethee the ters a'thaf the,aparethahe ncele t b ano the ithee wh w faLteaapleue 
+
+Step 650/2000 (epoch 0): loss = 2.6312 avg = 2.8194
+  seed: ore cause to be 
+  gen:  ore cause to be meuret t s in then hapin, ind,erorede the mith!hthathomathe
+ cksothe plieng he wAth te woro t me the
+
+Step 700/2000 (epoch 0): loss = 2.7298 avg = 2.8066
+  seed: t into his human
+  gen:  t into his humanacmedllne cheam g y Wef I as llllltEN
+W, the ngis foliaRldouds as ns
+ thercis IUUsasere Ronmis g'eth
+
+Step 750/2000 (epoch 0): loss = 2.5789 avg = 2.7264
+  seed: ixt doing them n
+  gen:  ixt doing them noco's he theurerg
+
+rs nove t tuge soletohecdapatUI.;eas oul t tor, ve s ve ngooth fone t nd caphando
+
+Step 800/2000 (epoch 0): loss = 2.5233 avg = 2.6882
+  seed: iefest virtue, a
+  gen:  iefest virtue, asg amo;
+
+INder fafot to waath, they G the t the the athe veuve fin s Ot; te ho sgthe th utody
+
+
+
+Mow
+
+Step 850/2000 (epoch 0): loss = 2.7149 avg = 2.6590
+  seed: onour!
+
+BRUTUS:
+  gen:  onour!
+
+BRUTUS:
+M
+MI t v touso f, he the Mofolungthe oustHeaurUSl t heeathe pereriit pe y bme t see sF ge handt heet
+
+Step 900/2000 (epoch 0): loss = 2.5585 avg = 2.6540
+  seed: eep their teeth 
+  gen:  eep their teeth s ouryirl, sti ng ar yyer cohor Conouthe mom
+O'ss hedershe bonovon fure ave 
+s het hareregheizountro
+
+Step 950/2000 (epoch 0): loss = 2.6809 avg = 2.6244
+  seed: nd make him good
+  gen:  nd make him good maz y yilllllly nto thindousere outoico ve isove.
+ d pe cm b therenends Wicaphir dae med be her wem
+
+Step 1000/2000 (epoch 0): loss = 2.4061 avg = 2.5950
+  seed: t his contempt s
+  gen:  t his contempt sour: he manof, may
+Hu noicNhme hahang ziinthave mouser.
+
+
+The'de mave'sUS:
+S hicyhatinid anouved d t
+
+Step 1050/2000 (epoch 0): loss = 2.7031 avg = 2.5712
+  seed: fe-guard he came
+  gen:  fe-guard he came se pardeteriches g se, wius b awaplekdott fac nd por mounthef d one t lllitolearlcereeraond nge map
+
+Step 1100/2000 (epoch 0): loss = 2.2332 avg = 2.5294
+  seed: ch they have giv
+  gen:  ch they have give t ushr,
+Ty we ger sondet o fam we, m wonllive arore worerelase nor t? muns ce f ceaor: soise opcas
+
+Step 1150/2000 (epoch 0): loss = 2.3397 avg = 2.5064
+  seed: RIOLANUS:
+No, ta
+  gen:  RIOLANUS:
+No, tat on ons hoth theayope m brore y be or buseis nor venus be 'the to ale the eaee the sathelor onrleno
+
+Step 1200/2000 (epoch 0): loss = 2.4993 avg = 2.5096
+  seed:  authority,
+Or l
+  gen:   authority,
+Or ldens st y tou ang.
+
+
+CANIUS:
+AUS:
+Tat brite arawom pwiacane mond test aire p, as! I tir ton pt igere
+
+Step 1250/2000 (epoch 0): loss = 2.1048 avg = 2.4549
+  seed: ant.
+
+SICINIUS:
+  gen:  ant.
+
+SICINIUS:
+G h leiced hebes mas'e inge seaves rec wond thinthe ror hithe he
+Whit heathon t fe hen:
+
+MENENIrenac
+
+Step 1300/2000 (epoch 0): loss = 2.3691 avg = 2.4359
+  seed: me further, who 
+  gen:  me further, who thee tho oull benpe sato sey angls woout hale I werer bhe, homur wit o the it the akerresimrises foc
+
+Step 1350/2000 (epoch 0): loss = 2.6406 avg = 2.4003
+  seed: the stones--for 
+  gen:  the stones--for fonl omam s?h phatnd fafare dondre fasce ar
+OArn non miL she OAr thou thon hat ollt pon ach, the fon
+
+Step 1400/2000 (epoch 0): loss = 2.3131 avg = 2.4026
+  seed: em accuse me by 
+  gen:  em accuse me by ath inir
+Lut the RIOreom'st sthe inthe yp:
+A be home'd minthm thers the fort thore fo heon? fony tha
+
+Step 1450/2000 (epoch 0): loss = 2.5730 avg = 2.3791
+  seed: wind
+Yourself in
+  gen:  wind
+Yourself ind as
+COLAr?
+CAnis sond.
+
+CNILo'm ravet chithet hees, chave, sonis susind fond to horns
+IYgisaf watat
+
+Step 1500/2000 (epoch 0): loss = 2.4137 avg = 2.3616
+  seed: :
+There is a wor
+  gen:  :
+There is a wor, ner thed mel suces, den:non prond arart loneashe
+Yito poillee lonil bas ons theer peof the on, pea
+
+Step 1550/2000 (epoch 0): loss = 2.4910 avg = 2.3626
+  seed: S:
+Now we have s
+  gen:  S:
+Now we have s terit fos woure he, tho hone nde.ing ans I cee on s thand,
+
+Maove wons pea wohes se te wod tan ade 
+
+Step 1600/2000 (epoch 0): loss = 2.3516 avg = 2.3449
+  seed: man:
+The main bl
+  gen:  man:
+The main blmr; sere wisto you' ont ye:
+Jomat, ce:
+We's seus at tongomin, io, hace fy, it hee lomes ou thane, an
+
+Step 1650/2000 (epoch 0): loss = 2.3442 avg = 2.3696
+  seed: e porter his eye
+  gen:  e porter his eyendt bo poss hiy ther the thos firs wost ferethy ith ban hade I star hme med sin ice thas', orede at 
+
+Step 1700/2000 (epoch 0): loss = 2.3749 avg = 2.3566
+  seed: hee, that wilt r
+  gen:  hee, that wilt re to to mid,aps the hust that bund do she sat the me tharo the mlat thire mervert nowarance Rome she
+
+Step 1750/2000 (epoch 0): loss = 2.5801 avg = 2.3719
+  seed: f face, methough
+  gen:  f face, methoughit rorc sost frimand menth wegry ou mive py, and ol mane fard sthe st I ans
+Se thals?
+Arels foungos 
+
+Step 1800/2000 (epoch 0): loss = 2.6616 avg = 2.3618
+  seed:  far as
+day does
+  gen:   far as
+day does ow, wear sivit oor thiws neat
+ble sith sol bies sher then: inte-'llotngit the iire hoi hast wil sav
+
+Step 1850/2000 (epoch 0): loss = 2.5233 avg = 2.3543
+  seed: to whip your inf
+  gen:  to whip your inf eave sore,
+Bun bind wile reri Yon thelost apot al stinged, wy the colll
+W
+Wowe lst ingthe tho the g
+
+Step 1900/2000 (epoch 0): loss = 2.1952 avg = 2.3345
+  seed: e brought it.
+
+M
+  gen:  e brought it.
+
+MENIUS:
+Ge thas sho d coursiish you sou, somefis, now'lar?
+'s lalinon ahe pe bout he cord fowe brer i
+
+Step 1950/2000 (epoch 0): loss = 2.4531 avg = 2.3373
+  seed: heir people
+Will
+  gen:  heir people
+Willoc I hir I atbes youldlllice bod dof ime thandave eand and yo as; Hante sh', ans hand chouste and in
+
+Final avg loss: 2.3202
+Model saved: /tmp/sgd_s64-lr3e-4-steps2000.model
+Result logged: data/results.tsv
