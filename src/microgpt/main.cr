@@ -1,11 +1,8 @@
 require "../microgpt"
-require "../agpt"
 require "jargon"
 require "yaml"
 
 module MicroGPT
-  AGPT_TOKENIZER_TAG = "char.sorted_unique.v1"
-
   SCHEMA = %({
     "type": "object",
     "positional": ["file"],
@@ -128,90 +125,6 @@ module MicroGPT
         "description": "Router type: global, context, gated",
         "enum": ["global", "context", "gated"],
         "default": "global"
-      },
-      "agpt": {
-        "type": "boolean",
-        "description": "Train with AGPT replay-prefix mode instead of sampled windows",
-        "default": false
-      },
-      "agpt-max-starts": {
-        "type": "integer",
-        "description": "Limit AGPT trie construction to N evenly distributed corpus start positions (0 = all)",
-        "default": 10000
-      },
-      "agpt-start-offset": {
-        "type": "integer",
-        "description": "Deterministic offset applied to evenly distributed AGPT start positions",
-        "default": 0
-      },
-      "agpt-progress": {
-        "type": "integer",
-        "description": "Print AGPT trie build progress every N start positions (0 = off)",
-        "default": 0
-      },
-      "agpt-save-index": {
-        "type": "string",
-        "description": "Save the built AGPT trie index to this path"
-      },
-      "agpt-load-index": {
-        "type": "string",
-        "description": "Load a previously saved AGPT trie index from this path"
-      },
-      "agpt-save-index-dir": {
-        "type": "string",
-        "description": "Save the built AGPT trie as a leveled (per-depth) index to this directory (default: /tmp/agpt_<file>_d<depth> when --agpt-build-index is set)"
-      },
-      "agpt-build-index": {
-        "type": "boolean",
-        "description": "Build AGPT trie index with auto-constructed path /tmp/agpt_<file_basename>_d<max_depth>",
-        "default": false
-      },
-      "agpt-build-radix": {
-        "type": "string",
-        "description": "Build a radix-compressed trie from an existing leveled trie directory (pass that dir's path)"
-      },
-      "agpt-radix-out": {
-        "type": "string",
-        "description": "Output directory for --agpt-build-radix (default: <input>_radix)"
-      },
-      "agpt-per-subtree": {
-        "type": "boolean",
-        "description": "Also emit per-subtree files (manifest.bin + subtrees/radix_subtree_NNNNNN.bin) for scalable training at d≥32",
-        "default": false
-      },
-      "agpt-subtree-level": {
-        "type": "integer",
-        "description": "When --agpt-per-subtree is set, depth of the subtree-key prefix: 1 = unigram (up to 65 subtrees, default), 2 = bigram (up to 65² subtrees, attacks dominant-root-child problem for d≥48)",
-        "default": 1
-      },
-      "agpt-prune-min-mass": {
-        "type": "integer",
-        "description": "Drop radix edges whose head-of-edge prefix count is below this threshold. Path mass=1 (appears once in corpus) contributes ~0 gradient under count-weighted loss but costs memory proportional to its depth. At d=128+ the vast majority of paths are mass=1. Applies only past --agpt-prune-min-depth. Default 1 (keep everything).",
-        "default": 1
-      },
-      "agpt-prune-min-depth": {
-        "type": "integer",
-        "description": "Never prune at depths shallower than this — preserves vocabulary / short-prefix coverage. Default 4.",
-        "default": 4
-      },
-      "agpt-max-depth": {
-        "type": "integer",
-        "description": "AGPT: cap trie depth during streaming build (default: seq_len). Use smaller values to limit disk usage for full-corpus builds.",
-        "default": -1
-      },
-      "agpt-load-index-dir": {
-        "type": "string",
-        "description": "Load a leveled (per-depth) AGPT trie index from this directory for lazy training"
-      },
-      "agpt-epochs-per-trie": {
-        "type": "integer",
-        "description": "AGPT: epochs per trie before rotating start offset (0 = no rotation)",
-        "default": 0
-      },
-      "agpt-entropy-lambda": {
-        "type": "number",
-        "description": "AGPT: structure-aware loss weighting strength (0 = off, 0.25 = moderate)",
-        "default": 0.0
       },
       "val-tokens": {
         "type": "integer",
@@ -339,63 +252,6 @@ module MicroGPT
       use_calculator = false
       bigram_off_at = result["bigram-off-at"].as_i64.to_i
       router_type  = result["router"].as_s
-      agpt_mode    = result["agpt"]?.try(&.as_bool) || false
-      agpt_max_starts = result["agpt-max-starts"].as_i64.to_i
-      agpt_start_offset = result["agpt-start-offset"].as_i64.to_i
-      agpt_progress = result["agpt-progress"].as_i64.to_i
-      agpt_epochs_per_trie = result["agpt-epochs-per-trie"].as_i64.to_i
-      agpt_entropy_lambda = result["agpt-entropy-lambda"].as_f
-      agpt_save_index = result["agpt-save-index"]?.try(&.as_s)
-      agpt_load_index = result["agpt-load-index"]?.try(&.as_s)
-      agpt_save_index_dir = result["agpt-save-index-dir"]?.try(&.as_s)
-      agpt_load_index_dir = result["agpt-load-index-dir"]?.try(&.as_s)
-      agpt_build_index   = result["agpt-build-index"]?.try(&.as_bool) || false
-      agpt_max_depth_raw = result["agpt-max-depth"].as_i64.to_i
-
-      # Auto-construct save path if --agpt-build-index is set without an explicit dir
-      if agpt_build_index && agpt_save_index_dir.nil?
-        input_basename = File.basename(filename, File.extname(filename))
-        effective_depth = agpt_max_depth_raw > 0 ? agpt_max_depth_raw : 128
-        agpt_save_index_dir = "/tmp/agpt_#{input_basename}_d#{effective_depth}"
-      end
-
-      # --- Standalone mode: build radix from an existing leveled trie, then exit ---
-      if radix_src = result["agpt-build-radix"]?.try(&.as_s)
-        radix_out = result["agpt-radix-out"]?.try(&.as_s)
-        if radix_out.nil?
-          src_base = File.basename(radix_src.rstrip('/'))
-          radix_out = "/tmp/#{src_base}_radix"
-        end
-        per_subtree = result["agpt-per-subtree"]?.try(&.as_bool) || false
-        subtree_level = result["agpt-subtree-level"]?.try(&.as_i) || 1
-        unless subtree_level == 1 || subtree_level == 2
-          STDERR.puts "Error: --agpt-subtree-level must be 1 (unigram) or 2 (bigram)"
-          exit 1
-        end
-        puts "Building radix trie from #{radix_src} → #{radix_out}#{per_subtree ? " (with per-subtree files, level=#{subtree_level})" : ""}"
-        # Keep the reader's own cache generous (it holds raw LoadedDepth;
-        # the StreamingRadixBuilder rebuilds its parent→children index
-        # from these on demand, which is fast as long as the source
-        # records are already resident). The builder has its own LRU on
-        # top (MAX_CACHED_INDEX) — that's what keeps total memory bounded.
-        reader = AGPT::LeveledTrieReader.new(radix_src, max_cached: 128)
-        prune_min_mass = result["agpt-prune-min-mass"]?.try(&.as_i) || 1
-        prune_min_depth = result["agpt-prune-min-depth"]?.try(&.as_i) || 4
-        if prune_min_mass > 1
-          puts "  Pruning: drop paths with mass < #{prune_min_mass} past depth #{prune_min_depth}"
-        end
-        builder = AGPT::StreamingRadixBuilder.new(reader, radix_out,
-          per_subtree: per_subtree, subtree_level: subtree_level,
-          prune_min_mass: prune_min_mass, prune_min_depth: prune_min_depth)
-        result_info = builder.build
-        puts "  radix_count:        #{result_info[:radix_count]}"
-        puts "  total_edge_chars:   #{result_info[:total_edge_chars]}"
-        puts "  max_endpoint_depth: #{result_info[:max_endpoint_depth]}"
-        puts "Original leveled trie had #{reader.node_count} nodes."
-        compression = reader.node_count.to_f64 / result_info[:radix_count].to_f64
-        puts "  compression ratio:  #{compression.round(2)}×"
-        exit 0
-      end
       val_size     = result["val-tokens"].as_i64.to_i
       val_interval = result["val-interval"].as_f
       build_only = result["build-only"]?.try(&.as_bool) || false
@@ -464,9 +320,7 @@ module MicroGPT
       dataset = CharDataset.new(text)
 
       # Held-out validation split: chop the last val_size tokens off the corpus.
-      # Window mode honors this via dataset.train_limit; AGPT mode honors it by
-      # building the trie from train_tokens only.
-      train_tokens = dataset.data
+      # Honored via dataset.train_limit so window sampling never sees val tokens.
       val_tokens = [] of Int32
       if val_size > 0
         if val_size + seq_len + 1 > dataset.data.size
@@ -474,25 +328,9 @@ module MicroGPT
           exit 1
         end
         train_size = dataset.data.size - val_size
-        train_tokens = dataset.data[0, train_size]
         val_tokens = dataset.data[train_size, val_size]
         dataset.train_limit = train_size
         puts "Held-out: #{val_size} tokens (train=#{train_size}, val_interval=#{val_interval}s)"
-      end
-
-      if agpt_mode
-        if cooperative
-          STDERR.puts "AGPT MVP currently supports single-model mode only"
-          exit 1
-        end
-        if compare
-          STDERR.puts "AGPT MVP does not support compare mode yet"
-          exit 1
-        end
-        if lookahead != 0
-          STDERR.puts "AGPT MVP does not support lookahead/future mode yet"
-          exit 1
-        end
       end
 
       # === Cooperative mode: μGPT ensemble with shared stream ===
@@ -856,7 +694,7 @@ module MicroGPT
       end
 
       # Auto-derive model save path from input filename
-      save_path = model_path || filename.sub(/\.[^.]+$/, "") + (agpt_mode ? ".agpt.model" : ".model")
+      save_path = model_path || filename.sub(/\.[^.]+$/, "") + ".model"
 
       # Load existing checkpoint if present
       if File.exists?(save_path)
@@ -868,183 +706,23 @@ module MicroGPT
         end
       end
 
-      agpt_trainer = nil
-      agpt_walk_trainer = nil.as(AGPT::TrieWalkTrainer?)
-      agpt_leveled_trainer = nil.as(AGPT::LeveledTrieWalkTrainer?)
-      if agpt_mode
-        corpus_hash = AGPT::TrieCorpus.token_hash(train_tokens)
+      puts "MiniGPT ready."
+      puts "  Vocab: #{dataset.vocab_size} chars"
+      puts "  Params: #{active_params}"
+      puts "  Config: d_model=#{config.d_model} n_layers=#{config.n_layers} d_ff=#{config.d_ff} seq_len=#{config.seq_len} lr=#{config.learning_rate}"
+      puts "  Backend: #{backend}"
+      puts "  Lookahead: #{lookahead}" if lookahead > 0
+      puts "  Mode: future (causal + anti-causal)" if lookahead == -1
+      puts "  Model: #{save_path}"
+      puts
 
-        if index_dir = agpt_load_index_dir
-          # --- Leveled (disk-paged) path: no TrieCorpus loaded into memory ---
-          begin
-            load_started_at = Time.instant
-            leveled_reader = AGPT::LeveledTrieReader.new(index_dir)
-            load_elapsed = Time.instant - load_started_at
-            lev_trainer = AGPT::LeveledTrieWalkTrainer.new(leveled_reader)
-            lev_trainer.entropy_lambda = agpt_entropy_lambda
-            agpt_leveled_trainer = lev_trainer
-            puts "MiniGPT ready."
-            puts "  Mode: AGPT leveled trie-walk (disk-paged BFS + KV cache)"
-            puts "  Vocab: #{dataset.vocab_size} chars"
-            puts "  Params: #{active_params}"
-            puts "  Config: d_model=#{config.d_model} n_layers=#{config.n_layers} d_ff=#{config.d_ff} seq_len=#{config.seq_len} lr=#{config.learning_rate}"
-            puts "  Backend: #{backend}"
-            puts "  Trie nodes: #{leveled_reader.node_count}"
-            puts "  Trie depths: #{leveled_reader.depth_file_count}"
-            puts "  Prefix examples: #{lev_trainer.observed_count}"
-            puts "  Trie index dir: #{index_dir}"
-            puts "  Trie load: #{load_elapsed.total_milliseconds.round(1)} ms (metadata only)"
-            puts "  Model: #{save_path}"
-            puts
-          rescue ex
-            STDERR.puts "AGPT leveled index error: #{ex.message}"
-            exit 1
-          end
-        elsif save_dir = agpt_save_index_dir
-          # --- Streaming leveled builder path ---
-          # Builds the full-corpus leveled index depth-by-depth without holding
-          # the entire trie in RAM, then loads it for training.
-          begin
-            STDERR.puts "[agpt stream] building full-corpus leveled index → #{save_dir}"
-            stream_started_at = Time.instant
-            build_max_depth = agpt_max_depth_raw > 0 ? agpt_max_depth_raw : config.seq_len
-            builder = AGPT::StreamingLeveledBuilder.new(
-              train_tokens,
-              save_dir,
-              max_depth: build_max_depth,
-              vocab_size: dataset.vocab_size,
-              corpus_hash: corpus_hash,
-              tokenizer_tag: AGPT_TOKENIZER_TAG
-            )
-            builder.build
-            stream_elapsed = Time.instant - stream_started_at
-            STDERR.puts "[agpt stream] index saved in #{stream_elapsed.total_seconds.round(1)}s"
-
-            load_started_at = Time.instant
-            leveled_reader = AGPT::LeveledTrieReader.new(save_dir)
-            load_elapsed = Time.instant - load_started_at
-            lev_trainer = AGPT::LeveledTrieWalkTrainer.new(leveled_reader)
-            lev_trainer.entropy_lambda = agpt_entropy_lambda
-            agpt_leveled_trainer = lev_trainer
-            puts "MiniGPT ready."
-            puts "  Mode: AGPT leveled trie-walk (disk-paged BFS + KV cache)"
-            puts "  Vocab: #{dataset.vocab_size} chars"
-            puts "  Params: #{active_params}"
-            puts "  Config: d_model=#{config.d_model} n_layers=#{config.n_layers} d_ff=#{config.d_ff} seq_len=#{config.seq_len} lr=#{config.learning_rate}"
-            puts "  Backend: #{backend}"
-            puts "  Trie nodes: #{leveled_reader.node_count}"
-            puts "  Trie depths: #{leveled_reader.depth_file_count}"
-            puts "  Prefix examples: #{lev_trainer.observed_count}"
-            puts "  Trie index dir: #{save_dir}"
-            puts "  Trie build: #{stream_elapsed.total_seconds.round(1)}s"
-            puts "  Trie load: #{load_elapsed.total_milliseconds.round(1)} ms (metadata only)"
-            puts "  Model: #{save_path}"
-            puts
-          rescue ex
-            STDERR.puts "AGPT streaming builder error: #{ex.message}"
-            STDERR.puts ex.backtrace.first(5).join("\n")
-            exit 1
-          end
-        else
-          # --- In-memory TrieCorpus path ---
-          trie_source = "built"
-          trie_index_path = agpt_load_index || agpt_save_index
-
-          if index_path = agpt_load_index
-            begin
-              build_started_at = Time.instant
-              trie = AGPT::TrieCorpus.load(index_path)
-              trie_build_time = Time.instant - build_started_at
-              trie.validate_metadata!(
-                corpus_token_count: train_tokens.size,
-                vocab_size: dataset.vocab_size,
-                corpus_hash: corpus_hash,
-                tokenizer_tag: AGPT_TOKENIZER_TAG,
-                max_depth: config.seq_len
-              )
-            rescue ex
-              STDERR.puts "AGPT index error: #{ex.message}"
-              exit 1
-            end
-            trie_source = "loaded"
-          else
-            max_starts = agpt_max_starts > 0 ? agpt_max_starts : nil
-            build_started_at = Time.instant
-            trie = AGPT::TrieCorpus.from_token_ids(
-              train_tokens,
-              max_depth: config.seq_len,
-              max_starts: max_starts,
-              start_offset: agpt_start_offset,
-              progress_interval: agpt_progress,
-              vocab_size: dataset.vocab_size,
-              corpus_hash: corpus_hash,
-              tokenizer_tag: AGPT_TOKENIZER_TAG
-            )
-            trie_build_time = Time.instant - build_started_at
-
-            if index_path = agpt_save_index
-              save_started_at = Time.instant
-              trie.save(index_path)
-              trie_save_time = Time.instant - save_started_at
-              STDERR.puts "[agpt index] saved #{index_path} in #{trie_save_time.total_milliseconds.round(1)} ms"
-            end
-
-            if dir = agpt_save_index_dir
-              save_started_at = Time.instant
-              trie.save_by_depth(dir)
-              save_elapsed = (Time.instant - save_started_at).total_milliseconds
-              STDERR.puts "[agpt index] saved leveled index #{dir} in #{save_elapsed.round(1)} ms"
-            end
-          end
-
-          wt = AGPT::TrieWalkTrainer.new(trie)
-          wt.entropy_lambda = agpt_entropy_lambda
-          agpt_walk_trainer = wt
-          agpt_trainer = AGPT::Trainer.new(trie)  # kept for fallback/comparison
-          trie_shape = trie.shape_stats
-          puts "MiniGPT ready."
-          puts "  Mode: AGPT trie-walk (BFS + KV cache)"
-          puts "  Vocab: #{dataset.vocab_size} chars"
-          puts "  Params: #{active_params}"
-          puts "  Config: d_model=#{config.d_model} n_layers=#{config.n_layers} d_ff=#{config.d_ff} seq_len=#{config.seq_len} lr=#{config.learning_rate}"
-          puts "  Backend: #{backend}"
-          puts "  Corpus tokens: #{dataset.data.size}"
-          puts "  AGPT max depth: #{trie.max_depth || "full"}"
-          puts "  Trie starts used: #{trie.starts_used} / #{dataset.data.size - 1}"
-          puts "  Start offset: #{agpt_start_offset}"
-          puts "  Trie nodes: #{trie.node_count}"
-          puts "  Prefix examples: #{wt.observed_count}"
-          puts "  Trie source: #{trie_source}"
-          puts "  Trie index: #{trie_index_path}" if trie_index_path
-          puts "  Trie load: #{trie_build_time.total_milliseconds.round(1)} ms" if trie_source == "loaded"
-          puts "  Trie build: #{trie_build_time.total_milliseconds.round(1)} ms" if trie_source == "built"
-          puts "  Trie shape: root=#{trie_shape.root_children} leaves=#{trie_shape.leaves} unary=#{trie_shape.unary_nodes} branching=#{trie_shape.branching_nodes}"
-          puts "  Trie breadth: peak=#{trie_shape.peak_width} at depth #{trie_shape.peak_width_depth} max_children=#{trie_shape.max_children} avg_internal=#{trie_shape.avg_children_per_internal.round(2)}"
-          puts "  Model: #{save_path}"
-          puts
-        end
-
-        next if build_only
-      else
-        puts "MiniGPT ready."
-        puts "  Vocab: #{dataset.vocab_size} chars"
-        puts "  Params: #{active_params}"
-        puts "  Config: d_model=#{config.d_model} n_layers=#{config.n_layers} d_ff=#{config.d_ff} seq_len=#{config.seq_len} lr=#{config.learning_rate}"
-        puts "  Backend: #{backend}"
-        puts "  Lookahead: #{lookahead}" if lookahead > 0
-        puts "  Mode: future (causal + anti-causal)" if lookahead == -1
-        puts "  Model: #{save_path}"
-        puts
-
-        next if build_only
-      end
+      next if build_only
 
       avg_loss = 0.0
       avg_causal_loss = 0.0
       avg_future_loss = 0.0
       avg_head_losses = Array(Float64).new((lookahead > 0 ? lookahead : 0) + 1, 0.0)
 
-      mode_tag = agpt_mode ? "agpt" : "window"
       run_started_at = Time.instant
       last_val_at = run_started_at
       last_val_step = -1
@@ -1054,97 +732,10 @@ module MicroGPT
         ce = dataset.held_out_loss(model, val_tokens, seq_len)
         val_elapsed = Time.instant - val_started
         wall = (Time.instant - run_started_at).total_seconds
-        puts "[val] mode=#{mode_tag} t=#{"%.3f" % wall} step=#{step} held_out_ce=#{"%.4f" % ce} eval_secs=#{"%.3f" % val_elapsed.total_seconds}"
+        puts "[val] t=#{"%.3f" % wall} step=#{step} held_out_ce=#{"%.4f" % ce} eval_secs=#{"%.3f" % val_elapsed.total_seconds}"
         last_val_at = Time.instant
         last_val_step = step
       }
-
-      # AGPT trie-walk mode: each "step" is a full BFS epoch over the trie.
-      # When --agpt-epochs-per-trie > 0, rotate start offset after that many
-      # epochs to cover more corpus with less redundant re-traversal.
-      if lev_trainer = agpt_leveled_trainer
-        # Leveled (disk-paged) BFS epoch loop — no trie rotation supported.
-        emit_val.call(0)
-        steps.times do |step|
-          MicroGPT::PerfTrace.reset if MicroGPT::PerfTrace.enabled?
-          epoch_started = Time.instant
-          loss, nodes = lev_trainer.train_epoch(model)
-          elapsed = Time.instant - epoch_started
-          avg_loss = step == 0 ? loss : 0.99 * avg_loss + 0.01 * loss
-
-          GC.collect if step % 2 == 0
-
-          puts "Epoch #{step}/#{steps} (#{nodes} nodes, #{"%.1f" % elapsed.total_seconds}s): loss = #{"%.4f" % loss} avg = #{"%.4f" % avg_loss} [agpt leveled]"
-          if MicroGPT::PerfTrace.enabled?
-            lines = MicroGPT::PerfTrace.report_lines
-            puts "  [perf] #{lines.join(" | ")}" unless lines.empty?
-          end
-          if step % 5 == 0
-            seed = dataset.data[0, Math.min(16, dataset.data.size)]
-            generated = model.generate(seed, 100, temperature: 0.8)
-            puts "  seed: #{dataset.decode(seed)}"
-            puts "  gen:  #{dataset.decode(generated)}"
-            puts
-          end
-
-          if val_size > 0 && val_interval > 0 && (Time.instant - last_val_at).total_seconds >= val_interval
-            emit_val.call(step + 1)
-          end
-        end
-      elsif walk_trainer = agpt_walk_trainer
-        emit_val.call(0)
-        current_offset = agpt_start_offset
-        rotation_stride = agpt_max_starts > 0 ? agpt_max_starts : 1
-        max_starts_val = agpt_max_starts > 0 ? agpt_max_starts : nil
-        train_size_total = train_tokens.size
-
-        steps.times do |step|
-          # Rotate trie after epochs_per_trie epochs (if enabled)
-          if agpt_epochs_per_trie > 0 && step > 0 && step % agpt_epochs_per_trie == 0
-            current_offset = (current_offset + rotation_stride) % Math.max(train_size_total - 1, 1)
-            rotate_start = Time.instant
-            trie = AGPT::TrieCorpus.from_token_ids(
-              train_tokens,
-              max_depth: config.seq_len,
-              max_starts: max_starts_val,
-              start_offset: current_offset,
-              progress_interval: 0,
-              vocab_size: dataset.vocab_size,
-              corpus_hash: corpus_hash,
-              tokenizer_tag: AGPT_TOKENIZER_TAG
-            )
-            walk_trainer = AGPT::TrieWalkTrainer.new(trie)
-            walk_trainer.entropy_lambda = agpt_entropy_lambda
-            rotate_ms = (Time.instant - rotate_start).total_milliseconds
-            puts "  [rotate] offset=#{current_offset} nodes=#{trie.node_count} build=#{rotate_ms.round(1)}ms"
-          end
-
-          MicroGPT::PerfTrace.reset if MicroGPT::PerfTrace.enabled?
-          epoch_started = Time.instant
-          loss, nodes = walk_trainer.train_epoch(model)
-          elapsed = Time.instant - epoch_started
-          avg_loss = step == 0 ? loss : 0.99 * avg_loss + 0.01 * loss
-
-          GC.collect if step % 2 == 0
-
-          puts "Epoch #{step}/#{steps} (#{nodes} nodes, #{"%.1f" % elapsed.total_seconds}s): loss = #{"%.4f" % loss} avg = #{"%.4f" % avg_loss} [agpt trie-walk]"
-          if MicroGPT::PerfTrace.enabled?
-            lines = MicroGPT::PerfTrace.report_lines
-            puts "  [perf] #{lines.join(" | ")}" unless lines.empty?
-          end
-          if step % 5 == 0
-            seed = dataset.data[0, Math.min(16, dataset.data.size)]
-            generated = model.generate(seed, 100, temperature: 0.8)
-            puts "  seed: #{dataset.decode(seed)}"
-            puts "  gen:  #{dataset.decode(generated)}"
-            puts
-          end
-
-          if val_size > 0 && val_interval > 0 && (Time.instant - last_val_at).total_seconds >= val_interval
-            emit_val.call(step + 1)
-          end
-        end
-      else
 
       emit_val.call(0)
       MicroGPT::PerfTrace.reset if MicroGPT::PerfTrace.enabled?
@@ -1191,11 +782,9 @@ module MicroGPT
         end
       end
 
-      end  # close agpt_walk_trainer else branch
-
       emit_val.call(steps) if steps > 0
 
-      if !agpt_mode && MicroGPT::PerfTrace.enabled?
+      if MicroGPT::PerfTrace.enabled?
         lines = MicroGPT::PerfTrace.report_lines
         puts "  [perf window/#{steps}steps] #{lines.join(" | ")}" unless lines.empty?
       end
@@ -1214,7 +803,6 @@ module MicroGPT
         # Log result
         rid_str = run_id || "d#{config.d_model}n#{config.n_layers}"
         extra = "d_model=#{config.d_model} n_layers=#{config.n_layers} d_ff=#{config.d_ff}"
-        extra += " mode=agpt" if agpt_mode
         log_result(rid_str, active_params, steps, avg_loss, extra, filename)
       end
       if do_gen

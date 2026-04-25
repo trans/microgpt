@@ -23,15 +23,6 @@ Does not depend on LR; same behavior at 3e-4, 1e-4, 3e-5, 1e-5.
 500 steps → PPL 19.00; 2000 steps → PPL 14.72 (seq=32, lr=3e-4, from random
 init). These are the numbers to cite as the SGD window-training baseline.
 
-**Impact on AGPT comparisons:** the SGD-window comparator in the paper should
-use the openblas numbers. The trie-based `L4_Path` sampler in bin/agpt_train
-is statistically equivalent to SGD by construction but empirically lags the
-real openblas SGD by ~2.5 PPL at matched steps (17.39 vs 14.72 at 2000
-steps, seq=32). Root cause of the gap not yet understood — likely
-loss-function differences (L4 uses AGPT's KL at endpoints, SGD uses pure
-next-token CE at every position) and/or optimizer differences (RMSProp vs
-SGD-variant in bin/microgpt).
-
 ---
 
 ## Original resolution (2026-04-19) — superseded by regression above

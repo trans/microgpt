@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Saturated window-training baseline sweep for the AGPT paper.
+# Saturated window-training baseline sweep.
 #
 # Uses --backend cublas for GPU speed. The save-stale-weights bug that was
 # silently making cublas training effectively train random-init models was
-# fixed 2026-04-19 (see docs/known-bugs-cublas-training.md).
+# fixed 2026-04-19 (see notes/core/known-bugs-cublas-training.md).
 #
 # Trains the same 108k-param model at seq_len ∈ {128, 512, 1024, 2048, 4096}
 # for 10k steps each (adjusted down at longer contexts to fit hardware budget),

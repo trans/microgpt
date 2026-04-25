@@ -1,42 +1,29 @@
-# MicroGPT / AGPT Research Repository
+# MicroGPT
 
-This repository is the home of the **AGPT (Aggregated-Gradient
-Pretraining)** research project and its reference implementation.
-It also contains the underlying Crystal transformer library used as
-the experimental substrate, plus supporting work.
+A minimal Crystal/CUDA transformer components kit for building and
+experimenting with character-level language models. From-scratch
+attention, pluggable Crystal/OpenBLAS/cuBLAS backends, a small CLI
+trainer, a perplexity evaluator, and a graphical construction kit
+for designing architectures visually.
 
 ## What's here
 
-- **[AGPT paper](notes/agpt/paper.md)** — the primary research
-  artifact: a gradient-factorization theorem for autoregressive
-  training on prefix tries, a memory-scalable implementation, and
-  empirical results on Shakespeare. This is the main thing to read.
-- **[AGPT training engine](src/cuda/agpt_train.cu)** — the CUDA
-  implementation validating the paper: radix-compressed trie
-  training with per-subtree KV-cache scoping, bigram partitioning,
-  auto-LR scaling, and frequency-based pruning.
-- **[MicroGPT](src/microgpt/)** — a minimal Crystal transformer
-  (from-scratch attention, pluggable Crystal/OpenBLAS/cuBLAS
-  backends) used as the substrate for the AGPT experiments and the
-  window-training baseline. Described in detail in the
-  *Design Decisions* section below.
-- **[Path-probability convergence paper](rnd/)** — an earlier
-  preprint on the statistical convergence of path-frequency
-  distributions across independent corpus splits; supporting work
-  that motivated some of AGPT's trie-based formulation. Results in
-  `rnd/results-extended.md`.
-- **Construction kit** (`src/microgpt/construction_kit.cr`,
-  frontend in `frontend/`) — an experimental graphical UI for
-  designing transformer architectures. Partially implemented and
-  not required to run or evaluate AGPT.
-
-For a short summary of the AGPT research claim and context, see
-[`notes/grants/emergent-ventures-pitch.md`](notes/grants/emergent-ventures-pitch.md).
+- **[MicroGPT](src/microgpt/)** — the Crystal transformer library:
+  model, dataset, attention, optimizer, three backends. The
+  *Design Decisions* section below covers the architectural
+  choices.
+- **CLI** (`bin/microgpt`) — train and generate text from a
+  character-level corpus.
+- **Perplexity evaluator** (`bin/perplexity`) — score any saved
+  checkpoint on held-out text.
+- **Cloud GPU runner** (`src/cloud/`, `bin/cloud`) — Vast.ai
+  rental wrapper for remote training jobs.
+- **Construction kit** (`src/construction_kit/`, Svelte frontend in
+  `src/construction_kit/frontend/`) — an experimental graphical UI
+  for composing transformer architectures from typed components.
+  Partially implemented.
 
 ## MicroGPT library — Design Decisions
-
-The following sections describe the Crystal transformer library
-itself, which AGPT uses as its transformer substrate.
 
 ### Data Chunking
 
@@ -100,53 +87,6 @@ The CLI uses a JSON schema for arguments. All flags use `--flag value` syntax.
 --lr 0.0003            # learning rate (default 0.0003)
 --no-save              # don't save checkpoint
 --model path.model     # save/load checkpoint path
-```
-
-### AGPT Training (trie-walk)
-
-Trains on a prefix trie of the corpus. Shared prefixes are computed once.
-
-```sh
-# Basic AGPT run
-./bin/microgpt data/input.txt --steps 10 --d-model 32 --n-layers 1 --seq-len 16 \
-  --agpt --agpt-max-starts 2000
-
-# With held-out validation (for comparison with window training)
-./bin/microgpt data/input.txt --steps 20 --d-model 32 --n-layers 1 --seq-len 16 \
-  --agpt --agpt-max-starts 2000 --val-tokens 5000 --val-interval 10
-
-# AGPT-specific options
---agpt                     # enable AGPT trie-walk mode
---agpt-max-starts 2000     # number of corpus start positions (0 = all)
---agpt-start-offset 0      # deterministic offset for start positions
---agpt-progress 1000       # print trie build progress every N starts
---agpt-save-index path.idx # save built trie index to disk
---agpt-load-index path.idx # load previously saved trie index
---build-only               # build/report trie without training
-```
-
-**AGPT terminology:**
-- **steps** = number of epochs (full trie traversals)
-- **epoch** = one forward pass over all trie nodes + backward + weight updates
-- **starts** = number of corpus positions used to build the trie (more starts = more prefix sharing but slower)
-
-### Comparison Runs
-
-To compare AGPT vs window training fairly, use the same model config, seed, and held-out split:
-
-```sh
-# Window baseline
-./bin/microgpt data/input.txt --steps 5000 --d-model 32 --n-layers 1 --seq-len 16 \
-  --val-tokens 5000 --val-interval 10 --seed 42 --no-save > window.log 2>&1
-
-# AGPT comparison
-./bin/microgpt data/input.txt --steps 20 --d-model 32 --n-layers 1 --seq-len 16 \
-  --val-tokens 5000 --val-interval 10 --seed 42 --no-save \
-  --agpt --agpt-max-starts 2000 > agpt.log 2>&1
-
-# Extract held-out CE curves (plot wall-clock vs held_out_ce)
-grep '\[val\]' window.log
-grep '\[val\]' agpt.log
 ```
 
 ### Backends
