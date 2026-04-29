@@ -140,6 +140,16 @@ module MicroGPT
         "type": "boolean",
         "description": "Build/load and report model state without training or generation",
         "default": false
+      },
+      "word-aligned": {
+        "type": "boolean",
+        "description": "Restrict training-sample windows to start at word boundaries (just-after-space). Validation eval is unaffected.",
+        "default": false
+      },
+      "depth-route-k": {
+        "type": "integer",
+        "description": "Depth-routed K/V gradient threshold. 0 = disabled. When >0, queries at window-position ≤ k feed Wk-grad only and queries at position > k feed Wv-grad only. Implements the K=decision/V=identity split.",
+        "default": 0
       }
     },
     "required": ["file"]
@@ -255,6 +265,12 @@ module MicroGPT
       val_size     = result["val-tokens"].as_i64.to_i
       val_interval = result["val-interval"].as_f
       build_only = result["build-only"]?.try(&.as_bool) || false
+      word_aligned_sampling = result["word-aligned"]?.try(&.as_bool) || false
+      depth_route_k = result["depth-route-k"]?.try(&.as_i64).try(&.to_i) || 0
+      MicroGPT.depth_route_k = depth_route_k
+      if depth_route_k > 0
+        puts "depth-route k=#{depth_route_k} (Wk grad ← p≤#{depth_route_k}, Wv grad ← p>#{depth_route_k})"
+      end
 
       # --- Load config from YAML if provided ---
       # YAML provides base values; explicit CLI flags override them.
@@ -318,6 +334,11 @@ module MicroGPT
 
       text = File.read(filename)
       dataset = CharDataset.new(text)
+      dataset.word_aligned = word_aligned_sampling
+      if word_aligned_sampling
+        n_starts = dataset.word_start_positions.size
+        puts "word-aligned sampling: #{n_starts} word-start positions in corpus"
+      end
 
       # Held-out validation split: chop the last val_size tokens off the corpus.
       # Honored via dataset.train_limit so window sampling never sees val tokens.

@@ -1218,6 +1218,14 @@ end
 
 class_property backend : Backend = CrystalBackend.new
 
+# Depth-routed K/V gradient threshold. 0 = disabled (default).
+# When > 0, MultiHeadAttention.backward zeros dK rows for query positions
+# > depth_route_k (so Wk-grad sees only "decision-zone" / shallow events)
+# and zeros dV rows for query positions ≤ depth_route_k (so Wv-grad sees
+# only "identity-zone" / deep events). Position is 0-indexed; setting k=11
+# means rows 0..11 feed Wk, rows 12.. feed Wv.
+class_property depth_route_k : Int32 = 0
+
 def self.use_crystal!
   @@backend = CrystalBackend.new
 end

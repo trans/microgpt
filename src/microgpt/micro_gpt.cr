@@ -897,6 +897,18 @@ class MultiHeadAttention
       {concat_cols(dq_parts), concat_cols(dk_parts), concat_cols(dv_parts)}
     end
 
+    # Depth-routed K/V gradient: zero per-position rows of dK above the threshold
+    # (so Wk-grad sees only decision-zone events) and dV rows at/below the
+    # threshold (so Wv-grad sees only identity-zone events). Applied AFTER the
+    # per-head backward so attention's softmax bookkeeping is unchanged, and
+    # BEFORE the Linear backward so the dx contribution from masked positions
+    # also goes to zero — same semantics as the AGPT trainer's depth routing.
+    k = MicroGPT.depth_route_k
+    if k > 0
+      MultiHeadAttention.zero_rows!(dk_all, after_index: k)        # zero rows p > k
+      MultiHeadAttention.zero_rows!(dv_all, before_or_equal: k)    # zero rows p ≤ k
+    end
+
     dx_q = @wq.backward(dq_all)
     dx_k = @wk.backward(dk_all)
     dx_v = @wv.backward(dv_all)
@@ -904,6 +916,26 @@ class MultiHeadAttention
     dx_q.add!(dx_k)
     dx_q.add!(dx_v)
     dx_q
+  end
+
+  # Zero rows of m. Pass either `after_index:` (zero rows where row > k) or
+  # `before_or_equal:` (zero rows where row ≤ k). Used by depth-routed K/V.
+  def self.zero_rows!(m : Mat, after_index : Int32? = nil, before_or_equal : Int32? = nil)
+    rows = m.rows
+    cols = m.cols
+    data = m.raw_data
+    rows.times do |r|
+      should_zero = false
+      if ai = after_index
+        should_zero = r > ai
+      end
+      if be = before_or_equal
+        should_zero = r <= be
+      end
+      next unless should_zero
+      base = r * cols
+      cols.times { |c| data[base + c] = 0.0_f32 }
+    end
   end
 
   # --- Batched attention (uniform heads only) ---
@@ -1246,8 +1278,10 @@ class CharDataset
   getter vocab_size : Int32
   getter stride : Int32
   property train_limit : Int32?  # cap on cursor range; rest is held-out for validation
+  property word_aligned : Bool = false  # restrict sample windows to start at word boundaries
   @cursor : Int32 = 0
   @epoch : Int32 = 0
+  @word_starts : Array(Int32)? = nil
 
   def initialize(text : String, @stride : Int32 = 0)
     @chars = text.chars.uniq.sort
@@ -1265,19 +1299,66 @@ class CharDataset
     @train_limit || @data.size
   end
 
+  # Position 0 plus every position whose predecessor is a space.
+  # Cached on first use.
+  def word_start_positions : Array(Int32)
+    if cached = @word_starts
+      return cached
+    end
+    space_id = @char_to_id[' ']?
+    raise "word-aligned sampling requires a space character in the corpus" unless space_id
+    starts = [] of Int32
+    starts << 0
+    (1...@data.size).each do |i|
+      starts << i if @data[i - 1] == space_id
+    end
+    @word_starts = starts
+    starts
+  end
+
   def sample(seq_len : Int32, lookahead : Int32 = 0) : {Array(Int32), Array(Array(Int32))}
     s = @stride > 0 ? @stride : seq_len
     needed = seq_len + 1 + lookahead
     limit = effective_size
+
+    # Wrap-around if next window doesn't fit.
     if @cursor + needed > limit
       @cursor = 0
       @epoch += 1
     end
-    input = @data[@cursor, seq_len]
-    targets = Array(Array(Int32)).new(lookahead + 1) do |k|
-      @data[@cursor + k + 1, seq_len]
+
+    pos = @cursor
+    if @word_aligned
+      # Snap forward to the nearest word-start position that still leaves
+      # room for the window. The cursor itself still advances by `s` from
+      # the original cursor — so corpus coverage rate matches baseline.
+      starts = word_start_positions
+      snapped = -1
+      probe = pos
+      while probe < limit
+        if probe == 0 || @data[probe - 1] == @char_to_id[' ']
+          if probe + needed <= limit
+            snapped = probe
+            break
+          end
+        end
+        probe += 1
+      end
+      if snapped < 0
+        # No word-start fits in remainder; wrap.
+        @cursor = 0
+        @epoch += 1
+        # Position 0 is treated as a word-start by definition.
+        snapped = 0
+      end
+      pos = snapped
     end
-    @cursor += s
+
+    input = @data[pos, seq_len]
+    targets = Array(Array(Int32)).new(lookahead + 1) do |k|
+      @data[pos + k + 1, seq_len]
+    end
+    @cursor = pos + s
     {input, targets}
   end
 
