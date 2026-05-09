@@ -79,8 +79,18 @@ module MicroGPT
       },
       "lr": {
         "type": "number",
-        "description": "Learning rate",
+        "description": "Learning rate (peak when --lr-schedule != constant)",
         "default": 0.0003
+      },
+      "lr-schedule": {
+        "type": "string",
+        "description": "constant | cosine | warmup-cosine (default: constant)",
+        "default": "constant"
+      },
+      "warmup-steps": {
+        "type": "integer",
+        "description": "Linear warmup steps for warmup-cosine schedule (default: 0)",
+        "default": 0
       },
       "compare": {
         "type": "string",
@@ -250,6 +260,8 @@ module MicroGPT
       no_save     = result["no-save"]?.try(&.as_bool) || false
       do_gen      = result["gen"]?.try(&.as_bool) || false
       lr          = result["lr"].as_f
+      lr_schedule = result["lr-schedule"]?.try(&.as_s) || "constant"
+      warmup_steps = result["warmup-steps"]?.try(&.as_i64.to_i) || 0
       compare     = result["compare"]?.try(&.as_s)
       cooperative  = result["cooperative"]?.try(&.as_s)
       stream_dim   = result["stream-dim"].as_i64.to_i
@@ -758,9 +770,30 @@ module MicroGPT
         last_val_step = step
       }
 
+      # LR schedule: returns LR for given step (0-indexed) given total steps.
+      compute_lr = ->(step : Int32, total : Int32) {
+        case lr_schedule
+        when "constant"
+          lr
+        when "cosine"
+          progress = step.to_f / total.to_f
+          0.5 * (1.0 + Math.cos(Math::PI * progress)) * lr
+        when "warmup-cosine"
+          if step < warmup_steps
+            (step.to_f + 1.0) / warmup_steps.to_f * lr
+          else
+            progress = (step - warmup_steps).to_f / Math.max(1, total - warmup_steps).to_f
+            0.5 * (1.0 + Math.cos(Math::PI * progress)) * lr
+          end
+        else
+          lr
+        end
+      }
+
       emit_val.call(0)
       MicroGPT::PerfTrace.reset if MicroGPT::PerfTrace.enabled?
       steps.times do |step|
+        config.learning_rate = compute_lr.call(step, steps)
         if fm = future_model
           input, targets = dataset.sample(config.seq_len, 0)
           loss, causal_loss, future_loss = fm.train_step(input, targets[0])
