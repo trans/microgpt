@@ -64,8 +64,12 @@ module MicroGPT
       },
       "model": {
         "type": "string",
-        "description": "Model checkpoint path (default: derived from input file)",
+        "description": "Model checkpoint path. Loaded if it exists; with no --save, also the save target after training. Default: derived from input file.",
         "short": "m"
+      },
+      "save": {
+        "type": "string",
+        "description": "Save target after training. Default: same as --model. When --model and --save differ, --model is load-only; --save receives the trained weights."
       },
       "no-save": {
         "type": "boolean",
@@ -257,6 +261,7 @@ module MicroGPT
       n_layers    = result["n-layers"].as_i64.to_i
       eval_file   = result["eval"]?.try(&.as_s)
       model_path  = result["model"]?.try(&.as_s)
+      save_path_arg = result["save"]?.try(&.as_s)
       no_save     = result["no-save"]?.try(&.as_bool) || false
       do_gen      = result["gen"]?.try(&.as_bool) || false
       lr          = result["lr"].as_f
@@ -726,17 +731,32 @@ module MicroGPT
         model.param_count
       end
 
-      # Auto-derive model save path from input filename
-      save_path = model_path || filename.sub(/\.[^.]+$/, "") + ".model"
+      # Resolve load + save paths. --model and --save are decoupled:
+      #   neither given      → save_path = <input>.model; auto-resume from it if it exists
+      #   --model X          → save_path = X; resume from X if it exists (current behavior)
+      #   --save Y           → save_path = Y; fresh init (no auto-resume from Y or default)
+      #   --model X --save Y → save_path = Y; resume from X if it exists
+      default_path = filename.sub(/\.[^.]+$/, "") + ".model"
+      save_path = save_path_arg || model_path || default_path
+      load_path = if model_path
+                    model_path
+                  elsif save_path_arg
+                    nil  # explicit --save without --model: fresh init
+                  else
+                    default_path  # neither flag: auto-resume from default
+                  end
 
-      # Load existing checkpoint if present
-      if File.exists?(save_path)
+      if load_path && File.exists?(load_path)
         begin
-          model.load(save_path)
-          puts "Loaded checkpoint: #{save_path}"
+          model.load(load_path)
+          puts "Loaded checkpoint: #{load_path}"
         rescue ex
-          puts "Skipping checkpoint (#{ex.message})"
+          puts "Skipping checkpoint #{load_path} (#{ex.message})"
         end
+      elsif load_path == model_path && model_path
+        # User explicitly named a model file that doesn't exist — surface it
+        # rather than silently starting from scratch.
+        STDERR.puts "WARN: --model #{model_path} does not exist; starting from fresh init"
       end
 
       puts "MiniGPT ready."
@@ -746,7 +766,11 @@ module MicroGPT
       puts "  Backend: #{backend}"
       puts "  Lookahead: #{lookahead}" if lookahead > 0
       puts "  Mode: future (causal + anti-causal)" if lookahead == -1
-      puts "  Model: #{save_path}"
+      if load_path && load_path != save_path
+        puts "  Model: load #{load_path} → save #{save_path}"
+      else
+        puts "  Model: #{save_path}"
+      end
       puts
 
       next if build_only
